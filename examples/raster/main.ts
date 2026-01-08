@@ -41,7 +41,7 @@ const map = new maplibregl.Map({
     sources: {
       osm: {
         type: 'raster',
-        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+        tiles: ['https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'],
         tileSize: 256,
         attribution: '&copy; OpenStreetMap contributors',
       },

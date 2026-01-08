@@ -41,9 +41,9 @@ const map = new maplibregl.Map({
     sources: {
       osm: {
         type: 'raster',
-        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+        tiles: ['https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'],
         tileSize: 256,
-        attribution: '&copy; OpenStreetMap contributors',
+        attribution: '&copy; Google',
       },
     },
     layers: [
@@ -65,6 +65,9 @@ map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
 // Add fullscreen control
 map.addControl(new maplibregl.FullscreenControl(), 'top-right');
+
+// Add globe control
+map.addControl(new maplibregl.GlobeControl(), 'top-right');
 
 // Source ID for the raster layer
 const RASTER_SOURCE_ID = 'pace-chla-raster';
