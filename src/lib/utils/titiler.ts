@@ -33,9 +33,9 @@ export interface TiTilerOptions {
   bidx?: number[];
 
   /**
-   * NoData value to use.
+   * NoData value to use. Can be a number or 'nan' for NaN values.
    */
-  nodata?: number;
+  nodata?: number | string;
 
   /**
    * Resampling method.
