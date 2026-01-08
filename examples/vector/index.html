@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MapLibre GL Time Slider - Vector Example</title>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    #map {
+      width: 100vw;
+      height: 100vh;
+    }
+    .info-panel {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      background: rgba(255, 255, 255, 0.9);
+      padding: 15px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+      max-width: 350px;
+      font-size: 13px;
+    }
+    .info-panel h3 {
+      margin: 0 0 10px 0;
+      font-size: 14px;
+    }
+    .info-panel p {
+      margin: 0 0 8px 0;
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div class="info-panel">
+    <h3>Significant Earthquakes 2015</h3>
+    <p>This example displays earthquake data filtered by month. The circles represent earthquake locations, with size indicating magnitude.</p>
+    <p>Use the <strong>Time Slider</strong> control to filter earthquakes by month.</p>
+  </div>
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>
