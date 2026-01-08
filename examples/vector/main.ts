@@ -23,10 +23,29 @@ const months = [
 const EARTHQUAKE_DATA_URL =
   'https://maplibre.org/maplibre-gl-js/docs/assets/significant-earthquakes-2015.geojson';
 
-// Create map
+// Create map with a simple style that doesn't require external fonts
 const map = new maplibregl.Map({
   container: 'map',
-  style: 'https://demotiles.maplibre.org/style.json',
+  style: {
+    version: 8,
+    sources: {
+      osm: {
+        type: 'raster',
+        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+        tileSize: 256,
+        attribution: '&copy; OpenStreetMap contributors',
+      },
+    },
+    layers: [
+      {
+        id: 'osm',
+        type: 'raster',
+        source: 'osm',
+        minzoom: 0,
+        maxzoom: 19,
+      },
+    ],
+  },
   center: [0, 20],
   zoom: 1.5,
 });
@@ -40,7 +59,6 @@ map.addControl(new maplibregl.FullscreenControl(), 'top-right');
 // Filter function
 function filterByMonth(month: number): void {
   map.setFilter('earthquake-circles', ['==', ['get', 'month'], month]);
-  map.setFilter('earthquake-labels', ['==', ['get', 'month'], month]);
 }
 
 // Add earthquake data and time slider when map loads
@@ -105,22 +123,6 @@ map.on('load', async () => {
     },
   });
 
-  // Add label layer for earthquake magnitudes
-  map.addLayer({
-    id: 'earthquake-labels',
-    type: 'symbol',
-    source: 'earthquakes',
-    layout: {
-      'text-field': ['concat', ['to-string', ['get', 'mag']], 'M'],
-      'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
-      'text-size': 10,
-    },
-    paint: {
-      'text-color': '#333',
-      'text-halo-color': '#fff',
-      'text-halo-width': 1,
-    },
-  });
 
   // Set initial filter to January
   filterByMonth(0);

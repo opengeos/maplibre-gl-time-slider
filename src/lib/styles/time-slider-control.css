@@ -218,19 +218,21 @@
   line-height: 1;
 }
 
-.time-slider-play {
+/* Play button - use higher specificity to ensure blue styling */
+.time-slider-controls .time-slider-btn.time-slider-play {
   background: #4a90d9;
   color: #fff;
   border-color: #4a90d9;
 }
 
-.time-slider-play:hover {
+.time-slider-controls .time-slider-btn.time-slider-play:hover {
   background: #3a7bc8;
   border-color: #3a7bc8;
 }
 
-.time-slider-play:active {
+.time-slider-controls .time-slider-btn.time-slider-play:active {
   background: #2d6cb3;
+  border-color: #2d6cb3;
 }
 
 /* Settings row */

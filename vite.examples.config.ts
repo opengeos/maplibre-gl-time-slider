@@ -15,6 +15,7 @@ export default defineConfig({
         main: resolve(__dirname, 'index.html'),
         raster: resolve(__dirname, 'examples/raster/index.html'),
         vector: resolve(__dirname, 'examples/vector/index.html'),
+        pace: resolve(__dirname, 'examples/pace/index.html'),
       },
     },
   },
