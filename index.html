@@ -3,61 +3,289 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MapLibre GL Time Slider</title>
+  <title>MapLibre GL Time Slider - Examples</title>
   <style>
+    * {
+      box-sizing: border-box;
+    }
+
     body {
       margin: 0;
-      padding: 20px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
     }
-    h1 {
-      margin-bottom: 20px;
+
+    .header {
+      text-align: center;
+      padding: 60px 20px 40px;
+      color: white;
     }
-    .examples {
-      display: flex;
-      gap: 20px;
-      flex-wrap: wrap;
+
+    .header h1 {
+      margin: 0 0 16px 0;
+      font-size: 2.5rem;
+      font-weight: 700;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
-    .example-card {
-      border: 1px solid #ddd;
-      border-radius: 8px;
-      padding: 20px;
-      width: 300px;
+
+    .header p {
+      margin: 0;
+      font-size: 1.1rem;
+      opacity: 0.9;
+      max-width: 600px;
+      margin: 0 auto;
+      line-height: 1.6;
     }
-    .example-card h2 {
-      margin-top: 0;
-    }
-    .example-card a {
+
+    .badge {
       display: inline-block;
-      margin-top: 10px;
+      margin-top: 20px;
       padding: 8px 16px;
-      background: #4a90d9;
+      background: rgba(255,255,255,0.2);
+      border-radius: 20px;
+      font-size: 0.85rem;
+      backdrop-filter: blur(10px);
+    }
+
+    .badge a {
       color: white;
       text-decoration: none;
-      border-radius: 4px;
     }
-    .example-card a:hover {
-      background: #3a7bc8;
+
+    .badge a:hover {
+      text-decoration: underline;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 20px 60px;
+    }
+
+    .examples {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 24px;
+    }
+
+    .example-card {
+      background: white;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .example-card:hover {
+      transform: translateY(-8px);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+    }
+
+    .card-image {
+      height: 180px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card-image.raster {
+      background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+    }
+
+    .card-image.pace {
+      background: linear-gradient(135deg, #0052D4 0%, #65C7F7 50%, #9CECFB 100%);
+    }
+
+    .card-image.vector {
+      background: linear-gradient(135deg, #f5af19 0%, #f12711 100%);
+    }
+
+    .card-icon {
+      font-size: 4rem;
+      opacity: 0.9;
+    }
+
+    .card-content {
+      padding: 24px;
+    }
+
+    .card-content h2 {
+      margin: 0 0 12px 0;
+      font-size: 1.4rem;
+      color: #1a1a2e;
+    }
+
+    .card-content p {
+      margin: 0 0 20px 0;
+      color: #666;
+      font-size: 0.95rem;
+      line-height: 1.6;
+    }
+
+    .card-tags {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+
+    .tag {
+      padding: 4px 10px;
+      background: #f0f0f0;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      color: #555;
+      font-weight: 500;
+    }
+
+    .card-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 24px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      text-decoration: none;
+      border-radius: 8px;
+      font-weight: 500;
+      font-size: 0.95rem;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+
+    .card-link:hover {
+      opacity: 0.9;
+      transform: translateX(4px);
+    }
+
+    .card-link svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .footer {
+      text-align: center;
+      padding: 40px 20px;
+      color: rgba(255,255,255,0.8);
+    }
+
+    .footer a {
+      color: white;
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    .footer a:hover {
+      text-decoration: underline;
+    }
+
+    .footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      margin-top: 16px;
+    }
+
+    @media (max-width: 768px) {
+      .header h1 {
+        font-size: 1.8rem;
+      }
+
+      .header p {
+        font-size: 1rem;
+      }
+
+      .examples {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
 <body>
-  <h1>MapLibre GL Time Slider Examples</h1>
-  <div class="examples">
-    <div class="example-card">
-      <h2>Raster Example</h2>
-      <p>Time series raster data visualization using TiTiler with NASA OPERA displacement data.</p>
-      <a href="examples/raster/">View Example</a>
+  <div class="header">
+    <h1>MapLibre GL Time Slider</h1>
+    <p>A powerful plugin for visualizing time series vector and raster data with an interactive time slider control.</p>
+    <div class="badge">
+      <a href="https://github.com/opengeos/maplibre-gl-time-slider" target="_blank">View on GitHub</a>
     </div>
-    <div class="example-card">
-      <h2>PACE Chlorophyll-a</h2>
-      <p>NASA PACE mission chlorophyll-a concentration data visualization.</p>
-      <a href="examples/pace/">View Example</a>
+  </div>
+
+  <div class="container">
+    <div class="examples">
+      <div class="example-card">
+        <div class="card-image raster">
+          <span class="card-icon">🛰️</span>
+        </div>
+        <div class="card-content">
+          <h2>NASA OPERA Displacement</h2>
+          <p>Visualize surface displacement measurements from the NASA OPERA project using TiTiler for COG rendering.</p>
+          <div class="card-tags">
+            <span class="tag">Raster</span>
+            <span class="tag">TiTiler</span>
+            <span class="tag">COG</span>
+          </div>
+          <a href="examples/raster/" class="card-link">
+            View Example
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M5 12h14M12 5l7 7-7 7"/>
+            </svg>
+          </a>
+        </div>
+      </div>
+
+      <div class="example-card">
+        <div class="card-image pace">
+          <span class="card-icon">🌊</span>
+        </div>
+        <div class="card-content">
+          <h2>PACE Chlorophyll-a</h2>
+          <p>Daily chlorophyll-a concentration data from NASA's PACE mission for ocean ecosystem monitoring.</p>
+          <div class="card-tags">
+            <span class="tag">Raster</span>
+            <span class="tag">Ocean</span>
+            <span class="tag">NASA PACE</span>
+          </div>
+          <a href="examples/pace/" class="card-link">
+            View Example
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M5 12h14M12 5l7 7-7 7"/>
+            </svg>
+          </a>
+        </div>
+      </div>
+
+      <div class="example-card">
+        <div class="card-image vector">
+          <span class="card-icon">🌍</span>
+        </div>
+        <div class="card-content">
+          <h2>Earthquake Timeline</h2>
+          <p>Filter and animate significant earthquakes from 2015 by month using vector data filtering.</p>
+          <div class="card-tags">
+            <span class="tag">Vector</span>
+            <span class="tag">GeoJSON</span>
+            <span class="tag">Filter</span>
+          </div>
+          <a href="examples/vector/" class="card-link">
+            View Example
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M5 12h14M12 5l7 7-7 7"/>
+            </svg>
+          </a>
+        </div>
+      </div>
     </div>
-    <div class="example-card">
-      <h2>Vector Example</h2>
-      <p>Time series vector data visualization filtering earthquake data by month.</p>
-      <a href="examples/vector/">View Example</a>
+  </div>
+
+  <div class="footer">
+    <p>Built with MapLibre GL JS</p>
+    <div class="footer-links">
+      <a href="https://github.com/opengeos/maplibre-gl-time-slider" target="_blank">GitHub</a>
+      <a href="https://www.npmjs.com/package/maplibre-gl-time-slider" target="_blank">npm</a>
+      <a href="https://github.com/opengeos/maplibre-gl-time-slider#readme" target="_blank">Documentation</a>
     </div>
   </div>
 </body>

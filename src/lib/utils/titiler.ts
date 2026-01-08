@@ -9,7 +9,7 @@ export interface TiTilerOptions {
 
   /**
    * TiTiler endpoint URL.
-   * @default 'https://titiler.xyz'
+   * @default 'https://giswqs-titiler-endpoint.hf.space'
    */
   endpoint?: string;
 
@@ -70,7 +70,7 @@ export interface TiTilerOptions {
  * // With custom options
  * const tileUrl = buildTiTilerTileUrl({
  *   url: 'https://example.com/my-cog.tif',
- *   endpoint: 'https://titiler.xyz',
+ *   endpoint: 'https://giswqs-titiler-endpoint.hf.space',
  *   colormap: 'rdbu',
  *   rescale: [-10, 10],
  *   bidx: [1],
@@ -87,7 +87,7 @@ export interface TiTilerOptions {
 export function buildTiTilerTileUrl(options: TiTilerOptions): string {
   const {
     url,
-    endpoint = 'https://titiler.xyz',
+    endpoint = 'https://giswqs-titiler-endpoint.hf.space',
     colormap = 'viridis',
     rescale,
     bidx,
@@ -147,7 +147,7 @@ export function buildTiTilerTileUrl(options: TiTilerOptions): string {
  */
 export async function getTiTilerBounds(
   url: string,
-  endpoint = 'https://titiler.xyz'
+  endpoint = 'https://giswqs-titiler-endpoint.hf.space'
 ): Promise<[number, number, number, number]> {
   const baseUrl = endpoint.replace(/\/$/, '');
   const infoUrl = `${baseUrl}/cog/bounds?url=${encodeURIComponent(url)}`;
@@ -176,7 +176,7 @@ export async function getTiTilerBounds(
  */
 export async function getTiTilerInfo(
   url: string,
-  endpoint = 'https://titiler.xyz'
+  endpoint = 'https://giswqs-titiler-endpoint.hf.space'
 ): Promise<Record<string, unknown>> {
   const baseUrl = endpoint.replace(/\/$/, '');
   const infoUrl = `${baseUrl}/cog/info?url=${encodeURIComponent(url)}`;
@@ -204,7 +204,7 @@ export async function getTiTilerInfo(
  */
 export async function getTiTilerStatistics(
   url: string,
-  endpoint = 'https://titiler.xyz'
+  endpoint = 'https://giswqs-titiler-endpoint.hf.space'
 ): Promise<Record<string, { min: number; max: number; mean: number; std: number }>> {
   const baseUrl = endpoint.replace(/\/$/, '');
   const statsUrl = `${baseUrl}/cog/statistics?url=${encodeURIComponent(url)}`;

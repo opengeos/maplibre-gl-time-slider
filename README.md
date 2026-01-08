@@ -229,7 +229,7 @@ Builds a TiTiler XYZ tile URL for MapLibre raster sources.
 ```typescript
 const tileUrl = buildTiTilerTileUrl({
   url: 'https://example.com/my-cog.tif',
-  endpoint: 'https://titiler.xyz',  // optional, default
+  endpoint: 'https://giswqs-titiler-endpoint.hf.space',  // optional, default
   colormap: 'viridis',              // optional, default
   rescale: [-10, 10],               // optional
   bidx: [1],                        // optional, band indexes

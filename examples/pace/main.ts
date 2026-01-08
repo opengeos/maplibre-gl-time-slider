@@ -21,7 +21,7 @@ const labels = Object.keys(rasterData);
 const urls = Object.values(rasterData);
 
 // TiTiler configuration
-const TITILER_ENDPOINT = 'https://titiler.xyz';
+const TITILER_ENDPOINT = 'https://giswqs-titiler-endpoint.hf.space';
 
 // Create the initial tile URL
 function createTileUrl(cogUrl: string): string {
@@ -30,6 +30,7 @@ function createTileUrl(cogUrl: string): string {
     endpoint: TITILER_ENDPOINT,
     colormap: 'jet',
     rescale: [0, 1], // Chlorophyll-a concentration
+    nodata: "nan",
   });
 }
 
@@ -56,8 +57,8 @@ const map = new maplibregl.Map({
       },
     ],
   },
-  center: [0, 0],
-  zoom: 1,
+  center: [-100, 40],
+  zoom: 3,
 });
 
 // Add navigation controls

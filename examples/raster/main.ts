@@ -21,7 +21,7 @@ const labels = Object.keys(rasterData);
 const urls = Object.values(rasterData);
 
 // TiTiler configuration
-const TITILER_ENDPOINT = 'https://titiler.xyz';
+const TITILER_ENDPOINT = 'https://giswqs-titiler-endpoint.hf.space';
 
 // Create the initial tile URL
 function createTileUrl(cogUrl: string): string {
