@@ -49,11 +49,10 @@
   fill: none;
 }
 
-/* Panel - dropdown below button */
+/* Panel - positioned dynamically by JavaScript for floating behavior */
 .time-slider-control-panel {
   position: absolute;
-  top: 100%;
-  margin-top: 5px;
+  /* Position is set dynamically by _updatePanelPosition() */
   background: #fff;
   border-radius: 4px;
   box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
@@ -64,17 +63,6 @@
   font-size: 12px;
   line-height: 1.4;
   display: none;
-}
-
-/* Panel positioning based on parent control position */
-.maplibregl-ctrl-top-left .time-slider-control-panel,
-.maplibregl-ctrl-bottom-left .time-slider-control-panel {
-  left: 0;
-}
-
-.maplibregl-ctrl-top-right .time-slider-control-panel,
-.maplibregl-ctrl-bottom-right .time-slider-control-panel {
-  right: 0;
 }
 
 .time-slider-control-panel.expanded {
