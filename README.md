@@ -4,6 +4,8 @@ A MapLibre GL JS plugin for visualizing time series vector and raster data with 
 
 [![npm version](https://badge.fury.io/js/maplibre-gl-time-slider.svg)](https://www.npmjs.com/package/maplibre-gl-time-slider)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Open in CodeSandbox](https://img.shields.io/badge/Open%20in-CodeSandbox-blue?logo=codesandbox)](https://codesandbox.io/p/github/opengeos/maplibre-gl-time-slider)
+[![Open in StackBlitz](https://img.shields.io/badge/Open%20in-StackBlitz-blue?logo=stackblitz)](https://stackblitz.com/github/opengeos/maplibre-gl-time-slider)
 
 ## Features
 
