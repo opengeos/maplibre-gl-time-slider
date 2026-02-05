@@ -207,6 +207,23 @@
   line-height: 1;
 }
 
+/* Add Layer button - distinctive styling */
+.time-slider-add-layer {
+  width: 100%;
+  background-color: #4a90d9 !important;
+  color: #fff !important;
+  border-color: #3a7bc8 !important;
+}
+
+.time-slider-add-layer:hover {
+  background-color: #3a7bc8 !important;
+  border-color: #2a6bb8 !important;
+}
+
+.time-slider-add-layer:active {
+  background-color: #2a6bb8 !important;
+}
+
 /* Settings row */
 .time-slider-settings {
   display: flex;

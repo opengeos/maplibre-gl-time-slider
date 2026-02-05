@@ -12,7 +12,9 @@ A MapLibre GL JS plugin for visualizing time series vector and raster data with 
 - Interactive time slider with play/pause controls
 - Support for both vector and raster time series data
 - Built-in TiTiler integration for Cloud Optimized GeoTIFFs (COGs)
+- **Add Layer button** for persisting time periods as permanent layers for comparison
 - Customizable playback speed and loop settings
+- Control layer ordering with `beforeId` parameter
 - React component and hooks support
 - TypeScript support with full type definitions
 - Lightweight and easy to integrate
@@ -167,6 +169,55 @@ const timeSlider = new TimeSliderControl({
 });
 ```
 
+### Adding Persistent Layers for Comparison
+
+Enable the "Add Layer" button to allow users to persist specific time periods as permanent layers:
+
+```typescript
+let layerCounter = 0;
+
+const timeSlider = new TimeSliderControl({
+  labels: ['2020', '2021', '2022', '2023'],
+  onChange: (index, label) => {
+    // Update the main time slider layer
+    const source = map.getSource('main-raster');
+    source.setTiles([getTileUrlForYear(label)]);
+  },
+  onAddLayer: (index, label, beforeId) => {
+    // Create a persistent layer for the selected time period
+    layerCounter++;
+    const sourceId = `persistent-source-${label}`;
+    const layerId = `Persistent Layer ${label}`;
+
+    // Add source
+    map.addSource(sourceId, {
+      type: 'raster',
+      tiles: [getTileUrlForYear(label)],
+      tileSize: 256,
+    });
+
+    // Add layer before the main time slider layer
+    map.addLayer({
+      id: layerId,
+      type: 'raster',
+      source: sourceId,
+      paint: {
+        'raster-opacity': 0.7,
+      },
+    }, beforeId);
+
+    console.log(`Added persistent layer for ${label}`);
+  },
+  beforeId: 'main-layer-id', // Insert persistent layers before this layer
+});
+```
+
+This feature is useful for:
+- Comparing data across multiple time periods
+- Creating side-by-side visualizations
+- Highlighting specific time periods for analysis
+- Building temporal comparisons in the layer control
+
 ## API Reference
 
 ### TimeSliderControl
@@ -187,6 +238,8 @@ Main control class that implements MapLibre's `IControl` interface.
 | `loop` | `boolean` | `true` | Whether to loop playback |
 | `className` | `string` | `''` | Custom CSS class name |
 | `onChange` | `function` | - | Callback when index changes: `(index: number, label: string) => void` |
+| `onAddLayer` | `function` | - | Callback when "Add Layer" button is clicked: `(index: number, label: string, beforeId?: string) => void` |
+| `beforeId` | `string` | - | Layer ID to insert new persistent layers before (ensures proper layer ordering) |
 
 #### Methods
 
