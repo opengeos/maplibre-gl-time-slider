@@ -9,7 +9,7 @@ import type {
 /**
  * Default options for the TimeSliderControl.
  */
-const DEFAULT_OPTIONS: Required<Omit<TimeSliderOptions, 'onChange'>> & { onChange?: TimeSliderOptions['onChange'] } = {
+const DEFAULT_OPTIONS: Required<Omit<TimeSliderOptions, 'onChange' | 'onAddLayer' | 'beforeId'>> & { onChange?: TimeSliderOptions['onChange']; onAddLayer?: TimeSliderOptions['onAddLayer']; beforeId?: string } = {
   collapsed: true,
   position: 'top-right',
   title: 'Time Slider',
@@ -20,6 +20,8 @@ const DEFAULT_OPTIONS: Required<Omit<TimeSliderOptions, 'onChange'>> & { onChang
   speed: 1000,
   loop: true,
   onChange: undefined,
+  onAddLayer: undefined,
+  beforeId: undefined,
 };
 
 /**
@@ -53,7 +55,7 @@ export class TimeSliderControl implements IControl {
   private _mapContainer?: HTMLElement;
   private _container?: HTMLElement;
   private _panel?: HTMLElement;
-  private _options: Required<Omit<TimeSliderOptions, 'onChange'>> & { onChange?: TimeSliderOptions['onChange'] };
+  private _options: Required<Omit<TimeSliderOptions, 'onChange' | 'onAddLayer' | 'beforeId'>> & { onChange?: TimeSliderOptions['onChange']; onAddLayer?: TimeSliderOptions['onAddLayer']; beforeId?: string };
   private _state: TimeSliderState;
   private _eventHandlers: EventHandlersMap = new globalThis.Map();
   private _playbackInterval?: ReturnType<typeof setInterval>;
@@ -69,6 +71,7 @@ export class TimeSliderControl implements IControl {
   private _playButton?: HTMLButtonElement;
   private _speedInput?: HTMLInputElement;
   private _loopCheckbox?: HTMLInputElement;
+  private _addLayerButton?: HTMLButtonElement;
 
   /**
    * Creates a new TimeSliderControl instance.
@@ -632,6 +635,25 @@ export class TimeSliderControl implements IControl {
     content.appendChild(this._slider);
     content.appendChild(controls);
     content.appendChild(settings);
+
+    // Add Layer button at the bottom (if callback provided)
+    if (this._options.onAddLayer) {
+      this._addLayerButton = document.createElement('button');
+      this._addLayerButton.className = 'time-slider-btn time-slider-add-layer';
+      this._addLayerButton.type = 'button';
+      this._addLayerButton.innerHTML = '<span class="time-slider-btn-icon">&#43;</span> Add Layer';
+      this._addLayerButton.title = 'Add current time period as a persistent layer';
+      this._addLayerButton.addEventListener('click', () => {
+        if (this._options.onAddLayer) {
+          this._options.onAddLayer(
+            this._state.currentIndex,
+            this._options.labels[this._state.currentIndex],
+            this._options.beforeId
+          );
+        }
+      });
+      content.appendChild(this._addLayerButton);
+    }
 
     panel.appendChild(header);
     panel.appendChild(content);

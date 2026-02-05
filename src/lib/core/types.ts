@@ -63,6 +63,22 @@ export interface TimeSliderOptions {
    * @param label - The current label string
    */
   onChange?: (index: number, label: string) => void;
+
+  /**
+   * Callback fired when the "Add Layer" button is clicked.
+   * This allows users to persist the current time period as a permanent layer.
+   *
+   * @param index - The current index
+   * @param label - The current label string
+   * @param beforeId - Optional layer ID to insert the new layer before
+   */
+  onAddLayer?: (index: number, label: string, beforeId?: string) => void;
+
+  /**
+   * ID of the layer before which to insert new layers when using onAddLayer.
+   * This ensures proper layer ordering in the map.
+   */
+  beforeId?: string;
 }
 
 /**
