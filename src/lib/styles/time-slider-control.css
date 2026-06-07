@@ -1,14 +1,77 @@
 /**
  * MapLibre GL Time Slider Control Styles
  *
- * Light theme styles matching MapLibre's default controls.
+ * Colors are driven by CSS custom properties so the control adapts to the
+ * system theme. The light palette is the default; the dark palette is applied
+ * automatically via `@media (prefers-color-scheme: dark)`.
+ *
+ * The panel is appended to the map container (not inside .time-slider-control),
+ * so the variables are defined on both root elements.
  */
+
+/* Light theme palette (default) */
+.time-slider-control,
+.time-slider-control-panel {
+  --ts-bg: #fff;
+  --ts-shadow: rgba(0, 0, 0, 0.1);
+  --ts-fg: #333;
+  --ts-fg-strong: #1f2a37;
+  --ts-fg-muted: #555;
+  --ts-fg-subtle: #999;
+  --ts-border: #e0e0e0;
+  --ts-hover-overlay: rgba(0, 0, 0, 0.05);
+  --ts-display-bg: #f5f5f5;
+  --ts-track: #e0e0e0;
+  --ts-thumb-border: #fff;
+  --ts-thumb-shadow: rgba(0, 0, 0, 0.3);
+  --ts-btn-bg: #e8e8e8;
+  --ts-btn-border: #ccc;
+  --ts-btn-hover-bg: #ddd;
+  --ts-btn-hover-border: #bbb;
+  --ts-btn-active-bg: #ccc;
+  --ts-input-bg: #fff;
+  --ts-input-border: #ddd;
+  --ts-accent: #4a90d9;
+  --ts-accent-hover: #3a7bc8;
+  --ts-accent-active: #2a6bb8;
+  --ts-accent-ring: rgba(74, 144, 217, 0.2);
+}
+
+/* Dark theme palette (follows the system preference) */
+@media (prefers-color-scheme: dark) {
+  .time-slider-control,
+  .time-slider-control-panel {
+    --ts-bg: #2b2b2b;
+    --ts-shadow: rgba(0, 0, 0, 0.5);
+    --ts-fg: #e6e6e6;
+    --ts-fg-strong: #f0f0f0;
+    --ts-fg-muted: #b5b5b5;
+    --ts-fg-subtle: #888;
+    --ts-border: #444;
+    --ts-hover-overlay: rgba(255, 255, 255, 0.08);
+    --ts-display-bg: #383838;
+    --ts-track: #555;
+    --ts-thumb-border: #2b2b2b;
+    --ts-thumb-shadow: rgba(0, 0, 0, 0.6);
+    --ts-btn-bg: #3a3a3a;
+    --ts-btn-border: #555;
+    --ts-btn-hover-bg: #4a4a4a;
+    --ts-btn-hover-border: #666;
+    --ts-btn-active-bg: #555;
+    --ts-input-bg: #383838;
+    --ts-input-border: #555;
+    --ts-accent: #5a9fe0;
+    --ts-accent-hover: #4a90d9;
+    --ts-accent-active: #3a7bc8;
+    --ts-accent-ring: rgba(90, 159, 224, 0.3);
+  }
+}
 
 /* Container - matches maplibregl-ctrl styling */
 .time-slider-control {
-  background: #fff;
+  background: var(--ts-bg);
   border-radius: 4px;
-  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 0 0 2px var(--ts-shadow);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
@@ -24,11 +87,11 @@
   justify-content: center;
   cursor: pointer;
   outline: none;
-  color: #1f2a37;
+  color: var(--ts-fg-strong);
 }
 
 .time-slider-control-toggle:hover {
-  background-color: rgba(0, 0, 0, 0.05);
+  background-color: var(--ts-hover-overlay);
 }
 
 .time-slider-control-icon {
@@ -53,9 +116,9 @@
 .time-slider-control-panel {
   position: absolute;
   /* Position is set dynamically by _updatePanelPosition() */
-  background: #fff;
+  background: var(--ts-bg);
   border-radius: 4px;
-  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 0 0 2px var(--ts-shadow);
   min-width: 280px;
   max-width: 420px;
   z-index: 1000;
@@ -76,9 +139,9 @@
   justify-content: space-between;
   gap: 10px;
   font-weight: 600;
-  color: #333;
+  color: var(--ts-fg);
   padding: 4px 0 8px 0;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid var(--ts-border);
   margin-bottom: 10px;
 }
 
@@ -92,7 +155,7 @@
   height: 20px;
   border: none;
   background: transparent;
-  color: #999;
+  color: var(--ts-fg-subtle);
   font-size: 18px;
   line-height: 1;
   cursor: pointer;
@@ -104,7 +167,7 @@
 }
 
 .time-slider-control-close:hover {
-  color: #333;
+  color: var(--ts-fg);
 }
 
 /* Content */
@@ -119,9 +182,9 @@
   text-align: center;
   font-size: 14px;
   font-weight: 600;
-  color: #333;
+  color: var(--ts-fg);
   padding: 6px 0;
-  background: #f5f5f5;
+  background: var(--ts-display-bg);
   border-radius: 4px;
 }
 
@@ -131,7 +194,7 @@
   height: 6px;
   -webkit-appearance: none;
   appearance: none;
-  background: #e0e0e0;
+  background: var(--ts-track);
   border-radius: 3px;
   outline: none;
   cursor: pointer;
@@ -142,31 +205,31 @@
   appearance: none;
   width: 16px;
   height: 16px;
-  background: #4a90d9;
+  background: var(--ts-accent);
   border-radius: 50%;
   cursor: pointer;
-  border: 2px solid #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  border: 2px solid var(--ts-thumb-border);
+  box-shadow: 0 1px 3px var(--ts-thumb-shadow);
   transition: background 0.15s ease;
 }
 
 .time-slider-range::-webkit-slider-thumb:hover {
-  background: #3a7bc8;
+  background: var(--ts-accent-hover);
 }
 
 .time-slider-range::-moz-range-thumb {
   width: 16px;
   height: 16px;
-  background: #4a90d9;
+  background: var(--ts-accent);
   border-radius: 50%;
   cursor: pointer;
-  border: 2px solid #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  border: 2px solid var(--ts-thumb-border);
+  box-shadow: 0 1px 3px var(--ts-thumb-shadow);
   transition: background 0.15s ease;
 }
 
 .time-slider-range::-moz-range-thumb:hover {
-  background: #3a7bc8;
+  background: var(--ts-accent-hover);
 }
 
 /* Control buttons */
@@ -184,9 +247,9 @@
   padding: 6px 10px;
   font-size: 12px;
   font-weight: 500;
-  color: #333;
-  background-color: #e8e8e8;
-  border: 1px solid #ccc;
+  color: var(--ts-fg);
+  background-color: var(--ts-btn-bg);
+  border: 1px solid var(--ts-btn-border);
   border-radius: 4px;
   cursor: pointer;
   transition: background-color 0.15s ease, border-color 0.15s ease;
@@ -194,12 +257,12 @@
 }
 
 .time-slider-control-content .time-slider-btn:hover {
-  background-color: #ddd;
-  border-color: #bbb;
+  background-color: var(--ts-btn-hover-bg);
+  border-color: var(--ts-btn-hover-border);
 }
 
 .time-slider-control-content .time-slider-btn:active {
-  background-color: #ccc;
+  background-color: var(--ts-btn-active-bg);
 }
 
 .time-slider-btn-icon {
@@ -210,18 +273,18 @@
 /* Add Layer button - distinctive styling */
 .time-slider-add-layer {
   width: 100%;
-  background-color: #4a90d9 !important;
+  background-color: var(--ts-accent) !important;
   color: #fff !important;
-  border-color: #3a7bc8 !important;
+  border-color: var(--ts-accent-hover) !important;
 }
 
 .time-slider-add-layer:hover {
-  background-color: #3a7bc8 !important;
-  border-color: #2a6bb8 !important;
+  background-color: var(--ts-accent-hover) !important;
+  border-color: var(--ts-accent-active) !important;
 }
 
 .time-slider-add-layer:active {
-  background-color: #2a6bb8 !important;
+  background-color: var(--ts-accent-active) !important;
 }
 
 /* Settings row */
@@ -231,7 +294,7 @@
   justify-content: space-between;
   gap: 12px;
   padding-top: 8px;
-  border-top: 1px solid #e0e0e0;
+  border-top: 1px solid var(--ts-border);
 }
 
 .time-slider-setting {
@@ -239,22 +302,24 @@
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  color: #555;
+  color: var(--ts-fg-muted);
 }
 
 .time-slider-speed-input {
   width: 60px;
   padding: 4px 6px;
   font-size: 12px;
-  border: 1px solid #ddd;
+  color: var(--ts-fg);
+  background: var(--ts-input-bg);
+  border: 1px solid var(--ts-input-border);
   border-radius: 3px;
   text-align: center;
   outline: none;
 }
 
 .time-slider-speed-input:focus {
-  border-color: #4a90d9;
-  box-shadow: 0 0 0 2px rgba(74, 144, 217, 0.2);
+  border-color: var(--ts-accent);
+  box-shadow: 0 0 0 2px var(--ts-accent-ring);
 }
 
 .time-slider-loop-label {
@@ -264,5 +329,5 @@
 .time-slider-loop-checkbox {
   margin: 0;
   cursor: pointer;
-  accent-color: #4a90d9;
+  accent-color: var(--ts-accent);
 }
