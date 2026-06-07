@@ -284,7 +284,7 @@ Builds a TiTiler XYZ tile URL for MapLibre raster sources.
 ```typescript
 const tileUrl = buildTiTilerTileUrl({
   url: 'https://example.com/my-cog.tif',
-  endpoint: 'https://giswqs-titiler-endpoint.hf.space',  // optional, default
+  endpoint: 'https://titiler.d2s.org',  // optional, default
   colormap: 'viridis',              // optional, default
   rescale: [-10, 10],               // optional
   bidx: [1],                        // optional, band indexes
