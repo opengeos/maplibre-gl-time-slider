@@ -61,6 +61,7 @@ export class TimeSliderControl implements IControl, DockController {
   private _mapContainer?: HTMLElement;
   private _container?: HTMLElement;
   private _wrapper?: HTMLElement;
+  private _resizeObserver?: ResizeObserver;
   private _savedContainerCss?: string;
   private _view?: DockView;
   private _state: TimeSliderState;
@@ -353,13 +354,65 @@ export class TimeSliderControl implements IControl, DockController {
     dock.classList.add('ts-docked');
     wrapper.appendChild(dock);
 
+    // Only the dimensions captured as a fixed pixel snapshot need active
+    // tracking. Responsive values ('100%', '100vh'/'100dvh') already follow the
+    // window through CSS, and re-pinning them to pixels would freeze them (and,
+    // for a content-sized parent like a full-viewport `<body>`, leave a gap
+    // below the dock when the window grows).
+    this._trackParentSize(
+      parent,
+      wrapper.style.width.endsWith('px'),
+      wrapper.style.height.endsWith('px')
+    );
     this._map?.resize();
+  }
+
+  /**
+   * Keeps the reserve-space wrapper matched to the box its parent allots it so
+   * the docked timeline tracks the map size when the window resizes or a side
+   * panel opens/closes. Only pixel-pinned dimensions are tracked: the initial
+   * {@link _fillSize} snapshot goes stale inside a responsive (e.g. flex) parent,
+   * whereas viewport/percentage values stay responsive on their own. A no-op
+   * where `ResizeObserver` is unavailable or neither dimension is pinned.
+   *
+   * @param parent - The wrapper's parent element to track.
+   * @param trackWidth - Whether the wrapper width was pinned to pixels.
+   * @param trackHeight - Whether the wrapper height was pinned to pixels.
+   */
+  private _trackParentSize(parent: HTMLElement, trackWidth: boolean, trackHeight: boolean): void {
+    const wrapper = this._wrapper;
+    if (!wrapper || typeof ResizeObserver === 'undefined') return;
+    if (!trackWidth && !trackHeight) return;
+    this._resizeObserver = new ResizeObserver(() => {
+      let changed = false;
+      // Skip zero sizes (e.g. the parent is briefly display:none) so a hidden
+      // panel cannot collapse the dock; the guard also prevents a feedback loop
+      // with shrink-to-fit parents.
+      if (trackWidth && parent.clientWidth > 0) {
+        const width = `${parent.clientWidth}px`;
+        if (wrapper.style.width !== width) {
+          wrapper.style.width = width;
+          changed = true;
+        }
+      }
+      if (trackHeight && parent.clientHeight > 0) {
+        const height = `${parent.clientHeight}px`;
+        if (wrapper.style.height !== height) {
+          wrapper.style.height = height;
+          changed = true;
+        }
+      }
+      if (changed) this._map?.resize();
+    });
+    this._resizeObserver.observe(parent);
   }
 
   /**
    * Restores the original DOM/styles undone by {@link _installLayout}.
    */
   private _uninstallLayout(): void {
+    this._resizeObserver?.disconnect();
+    this._resizeObserver = undefined;
     this._view?.root.classList.remove('ts-docked');
     if (this._wrapper && this._mapContainer) {
       const parent = this._wrapper.parentElement;

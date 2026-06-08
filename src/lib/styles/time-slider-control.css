@@ -80,8 +80,11 @@
   --ts-accent-ring: rgba(90, 159, 224, 0.35);
 }
 
-/* Corner toggle button (clock icon) that collapses/expands the dock. */
-.maplibregl-time-slider-toggle-btn {
+/* Corner toggle button (clock icon) that collapses/expands the dock. The
+ * selector is scoped under the toggle container so it outranks MapLibre's own
+ * `.maplibregl-ctrl-group button { display: block }` rule (which would otherwise
+ * win on specificity and push the clock icon to the top-left corner). */
+.maplibregl-time-slider-toggle .maplibregl-time-slider-toggle-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -94,7 +97,7 @@
   color: #333;
 }
 
-.maplibregl-time-slider-toggle-btn svg {
+.maplibregl-time-slider-toggle .maplibregl-time-slider-toggle-btn svg {
   width: 20px;
   height: 20px;
 }

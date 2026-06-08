@@ -1,3 +1,4 @@
+import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { Granularity, SourceSpec, TimeSliderState } from '../core/types';
 
 /**
@@ -16,6 +17,8 @@ export interface DockController {
   getTheme(): 'auto' | 'light' | 'dark';
   /** Whether playback starts automatically when the control is added. */
   getAutoPlay(): boolean;
+  /** The MapLibre map the control is attached to, if added. */
+  getMap(): MapLibreMap | undefined;
 
   /** Navigate to a specific date (snapped internally). */
   goTo(date: Date): void;

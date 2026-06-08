@@ -23,6 +23,7 @@ function baseController(overrides: Partial<DockController> = {}): DockController
     getDateFormat: () => 'YYYY-MM-DD',
     getTheme: () => 'auto',
     getAutoPlay: () => false,
+    getMap: () => undefined,
     goTo: vi.fn(),
     next: vi.fn(),
     prev: vi.fn(),
