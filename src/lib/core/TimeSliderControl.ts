@@ -61,6 +61,7 @@ export class TimeSliderControl implements IControl, DockController {
   private _mapContainer?: HTMLElement;
   private _container?: HTMLElement;
   private _wrapper?: HTMLElement;
+  private _resizeObserver?: ResizeObserver;
   private _savedContainerCss?: string;
   private _view?: DockView;
   private _state: TimeSliderState;
@@ -353,13 +354,53 @@ export class TimeSliderControl implements IControl, DockController {
     dock.classList.add('ts-docked');
     wrapper.appendChild(dock);
 
+    this._trackParentSize(parent);
     this._map?.resize();
+  }
+
+  /**
+   * Keeps the reserve-space wrapper matched to the box its parent allots it so
+   * the docked timeline tracks the map width when the window resizes or a side
+   * panel opens/closes. The initial {@link _fillSize} values capture only a
+   * snapshot, which goes stale inside a responsive (e.g. flex) parent; observing
+   * the parent keeps the wrapper (and the map below it) in sync. A no-op where
+   * `ResizeObserver` is unavailable, with the snapshot size kept as a fallback.
+   *
+   * @param parent - The wrapper's parent element to track.
+   */
+  private _trackParentSize(parent: HTMLElement): void {
+    const wrapper = this._wrapper;
+    if (!wrapper || typeof ResizeObserver === 'undefined') return;
+    this._resizeObserver = new ResizeObserver(() => {
+      let changed = false;
+      // Skip zero sizes (e.g. the parent is briefly display:none) so a hidden
+      // panel cannot collapse the dock; the guard also prevents a feedback loop
+      // with shrink-to-fit parents.
+      if (parent.clientWidth > 0) {
+        const width = `${parent.clientWidth}px`;
+        if (wrapper.style.width !== width) {
+          wrapper.style.width = width;
+          changed = true;
+        }
+      }
+      if (parent.clientHeight > 0) {
+        const height = `${parent.clientHeight}px`;
+        if (wrapper.style.height !== height) {
+          wrapper.style.height = height;
+          changed = true;
+        }
+      }
+      if (changed) this._map?.resize();
+    });
+    this._resizeObserver.observe(parent);
   }
 
   /**
    * Restores the original DOM/styles undone by {@link _installLayout}.
    */
   private _uninstallLayout(): void {
+    this._resizeObserver?.disconnect();
+    this._resizeObserver = undefined;
     this._view?.root.classList.remove('ts-docked');
     if (this._wrapper && this._mapContainer) {
       const parent = this._wrapper.parentElement;

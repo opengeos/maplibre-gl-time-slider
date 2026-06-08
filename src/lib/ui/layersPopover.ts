@@ -715,6 +715,87 @@ function buildCogControls(controller: DockController, spec: CogSourceSpec): HTML
 }
 
 /**
+ * Fits the map to a freshly added source's extent so the new layer lands in
+ * view. COG specs carry the TiTiler footprint fetched when the layer is added,
+ * and any source may supply an explicit `bounds`; GeoJSON bounds are derived
+ * from the feature coordinates. Tiled sources (XYZ/WMS) have no intrinsic
+ * extent, so they are left untouched. All failures are non-fatal.
+ *
+ * @param controller - The control's UI-facing API
+ * @param spec - The source that was just added
+ */
+async function fitToSourceBounds(controller: DockController, spec: SourceSpec): Promise<void> {
+  const map = controller.getMap();
+  if (!map) return;
+  let bounds = isLngLatBounds(spec.bounds) ? spec.bounds : undefined;
+  if (!bounds && spec.type === 'geojson') {
+    bounds = await computeGeoJsonBounds(spec.data).catch(() => undefined);
+  }
+  if (!bounds) return;
+  map.fitBounds(bounds, { padding: 40, duration: 600, maxZoom: 16 });
+}
+
+/**
+ * Narrows a value to a finite `[west, south, east, north]` extent.
+ *
+ * @param value - A candidate bounds value
+ * @returns The bounds when valid, otherwise undefined
+ */
+function isLngLatBounds(value: unknown): [number, number, number, number] | undefined {
+  return Array.isArray(value) && value.length === 4 && value.every((n) => Number.isFinite(n))
+    ? (value as [number, number, number, number])
+    : undefined;
+}
+
+/**
+ * Computes a `[west, south, east, north]` extent for GeoJSON data, fetching it
+ * first when given a URL. Returns undefined when the data has no coordinates.
+ *
+ * @param data - A GeoJSON object or a URL string pointing to one
+ * @returns The extent, or undefined when it cannot be determined
+ */
+async function computeGeoJsonBounds(
+  data: unknown
+): Promise<[number, number, number, number] | undefined> {
+  const geojson = typeof data === 'string' ? ((await (await fetch(data)).json()) as unknown) : data;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  const visit = (coords: unknown): void => {
+    if (Array.isArray(coords) && typeof coords[0] === 'number') {
+      const [x, y] = coords as number[];
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+    } else if (Array.isArray(coords)) {
+      for (const child of coords) visit(child);
+    }
+  };
+  const visitGeometry = (geometry: unknown): void => {
+    if (!geometry || typeof geometry !== 'object') return;
+    const g = geometry as { type?: string; coordinates?: unknown; geometries?: unknown };
+    if (g.type === 'GeometryCollection' && Array.isArray(g.geometries)) {
+      g.geometries.forEach(visitGeometry);
+    } else if (g.coordinates !== undefined) {
+      visit(g.coordinates);
+    }
+  };
+  if (geojson && typeof geojson === 'object') {
+    const obj = geojson as { type?: string; features?: unknown; geometry?: unknown };
+    if (obj.type === 'FeatureCollection' && Array.isArray(obj.features)) {
+      obj.features.forEach((f) => visitGeometry((f as { geometry?: unknown }).geometry));
+    } else if (obj.type === 'Feature') {
+      visitGeometry(obj.geometry);
+    } else {
+      visitGeometry(obj);
+    }
+  }
+  return isLngLatBounds([minX, minY, maxX, maxY]);
+}
+
+/**
  * Builds the add-data form: name/id fields, a type selector with type-specific
  * fields (colormap/rescale/bands for COG only), and an Add button. Selecting a
  * type pre-fills the matching example and applies its timeline/settings.
@@ -930,23 +1011,12 @@ function buildForm(
     }
 
     controller.addSource(spec);
-    // Reset the form inputs.
-    [
-      nameField,
-      idField,
-      urlField,
-      nodataField,
-      bandsField,
-      tilesField,
-      dataField,
-      timePropField,
-      baseUrlField,
-      wmsLayersField,
-    ].forEach((f) => (f.input.value = ''));
-    rescaleMin.value = '';
-    rescaleMax.value = '';
-    cmapSelect.value = '';
-    windowField.select.value = 'day';
+    // Zoom to the new layer's extent so it is immediately in view. COG specs
+    // carry the TiTiler footprint fetched above; any source may also supply an
+    // explicit `bounds`. Tiled sources (XYZ/WMS) have no intrinsic extent.
+    fitToSourceBounds(controller, spec);
+    // The form fields are intentionally left as-is so the user can tweak and add
+    // related layers without re-entering shared values.
     onAdded();
   });
 
