@@ -51,6 +51,8 @@ const map = new maplibregl.Map({
 });
 
 map.addControl(new maplibregl.NavigationControl(), 'top-right');
+// Toggle between the flat Mercator map and a 3D globe (MapLibre GL v5+).
+map.addControl(new maplibregl.GlobeControl(), 'top-right');
 map.addControl(new maplibregl.FullscreenControl(), 'top-right');
 
 map.on('load', () => {
