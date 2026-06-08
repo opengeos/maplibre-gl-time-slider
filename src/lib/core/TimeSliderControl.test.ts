@@ -239,6 +239,7 @@ describe('TimeSliderControl config', () => {
     expect(fresh.getAutoPlay()).toBe(false);
     fresh.setConfig(control.getConfig());
     expect(fresh.getAutoPlay()).toBe(true);
+    control.pause();
   });
 });
 

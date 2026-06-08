@@ -590,7 +590,9 @@ export class TimeSliderControl implements IControl, DockController {
     this._options.granularities = ordered;
     this._view?.syncGranularities();
     if (!ordered.includes(this._state.granularity)) {
+      // setGranularity already emits granularitychange + statechange.
       this.setGranularity(ordered[0]);
+      return;
     }
     this._emit('statechange');
   }
