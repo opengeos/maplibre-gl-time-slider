@@ -1,5 +1,6 @@
-import type { CogSourceSpec, SourceSpec } from '../core/types';
+import type { CogSourceSpec, Granularity, SourceSpec } from '../core/types';
 import { formatDate } from '../template/dateFormat';
+import { GRANULARITIES } from '../time/granularity';
 import type { DockController } from './types';
 
 /**
@@ -78,15 +79,64 @@ function field(
 }
 
 /**
+ * Builds a labeled `<select>` row.
+ *
+ * @param label - Field label
+ * @param options - Option value/label pairs
+ * @returns The row element and its select
+ */
+function selectField(
+  label: string,
+  options: { value: string; label: string }[]
+): { row: HTMLElement; select: HTMLSelectElement } {
+  const row = document.createElement('label');
+  row.className = 'ts-field';
+  const span = document.createElement('span');
+  span.textContent = label;
+  const select = document.createElement('select');
+  for (const o of options) {
+    const opt = document.createElement('option');
+    opt.value = o.value;
+    opt.textContent = o.label;
+    select.appendChild(opt);
+  }
+  row.append(span, select);
+  return { row, select };
+}
+
+/**
+ * Builds a labeled checkbox row (label text after the box).
+ *
+ * @param label - Field label
+ * @returns The row element and its checkbox input
+ */
+function checkboxField(label: string): { row: HTMLElement; input: HTMLInputElement } {
+  const row = document.createElement('label');
+  row.className = 'ts-field ts-field-check';
+  const input = document.createElement('input');
+  input.type = 'checkbox';
+  const span = document.createElement('span');
+  span.textContent = label;
+  row.append(input, span);
+  return { row, input };
+}
+
+/**
  * Builds a colormap `<select>` seeded from {@link COLORMAPS}, keeping any
  * pre-existing custom value as the first option.
  *
- * @param current - The currently selected colormap
+ * @param current - The currently selected colormap (empty/undefined = none)
  * @returns A select element
  */
 function colormapSelect(current?: string): HTMLSelectElement {
   const select = document.createElement('select');
   select.className = 'ts-cmap';
+  // A "None" option (empty value) leaves the colormap off, which is required for
+  // RGB / multi-band imagery.
+  const none = document.createElement('option');
+  none.value = '';
+  none.textContent = 'None (RGB / multi-band)';
+  select.appendChild(none);
   const values = [...new Set([...COLORMAPS, ...(current ? [current] : [])])].sort();
   for (const cmap of values) {
     const opt = document.createElement('option');
@@ -119,13 +169,22 @@ export function createLayersPopover(controller: DockController): LayersHandle {
   popover.className = 'ts-popover';
 
   const timeline = buildTimelineSection(controller);
+  const settings = buildSettingsSection(controller);
 
+  // Layers section: a titled wrapper so the layer cards read as their own group
+  // rather than floating between the Settings and Add-data sections.
+  const layersSection = document.createElement('div');
+  layersSection.className = 'ts-layers-section';
+  const layersTitle = document.createElement('div');
+  layersTitle.className = 'ts-layers-title';
+  layersTitle.textContent = 'Layers';
   const list = document.createElement('div');
   list.className = 'ts-layer-list';
+  layersSection.append(layersTitle, list);
 
   const form = buildForm(controller, () => refresh());
 
-  popover.append(timeline.section, list, form);
+  popover.append(timeline.section, settings.section, layersSection, form);
   root.append(toggleBtn, popover);
 
   const close = (): void => root.classList.remove('ts-open');
@@ -133,7 +192,10 @@ export function createLayersPopover(controller: DockController): LayersHandle {
     e.stopPropagation();
     const opening = !root.classList.contains('ts-open');
     root.classList.toggle('ts-open');
-    if (opening) timeline.sync();
+    if (opening) {
+      timeline.sync();
+      settings.sync();
+    }
   });
   popover.addEventListener('click', (e) => e.stopPropagation());
   const onDocClick = (): void => close();
@@ -184,7 +246,8 @@ function buildTimelineSection(controller: DockController): {
   const end = field('End date', '', 'date');
   const interval = field('Interval', '', 'number');
   interval.input.min = '1';
-  fields.append(start.row, end.row, interval.row);
+  const initial = field('Initial date', '', 'date');
+  fields.append(start.row, end.row, interval.row, initial.row);
 
   section.append(title, fields);
 
@@ -199,12 +262,147 @@ function buildTimelineSection(controller: DockController): {
   start.input.addEventListener('change', apply);
   end.input.addEventListener('change', apply);
   interval.input.addEventListener('change', apply);
+  initial.input.addEventListener('change', () => {
+    if (!initial.input.value) return;
+    const date = new Date(initial.input.value);
+    if (!Number.isNaN(date.getTime())) controller.goTo(date);
+  });
 
   const sync = (): void => {
     const state = controller.getState();
     start.input.value = formatDate(state.startDate, 'YYYY-MM-DD');
     end.input.value = formatDate(state.endDate, 'YYYY-MM-DD');
     interval.input.value = String(state.interval);
+    initial.input.value = formatDate(state.currentDate, 'YYYY-MM-DD');
+  };
+  sync();
+
+  return { section, sync };
+}
+
+/**
+ * Builds the settings section, exposing the tweakable constructor options in one
+ * place: granularity, playback speed, loop, theme, date-label format, and
+ * auto-play. Each control is wired to a live controller setter.
+ *
+ * @param controller - The control's UI-facing API
+ * @returns The section element and a `sync` to refresh values from state
+ */
+function buildSettingsSection(controller: DockController): {
+  section: HTMLElement;
+  sync: () => void;
+} {
+  const section = document.createElement('div');
+  section.className = 'ts-settings-section';
+
+  const title = document.createElement('div');
+  title.className = 'ts-form-title';
+  title.textContent = 'Settings';
+
+  const fields = document.createElement('div');
+  fields.className = 'ts-form-fields';
+
+  const label = (g: Granularity): string => g[0].toUpperCase() + g.slice(1);
+
+  const granularity = selectField('Granularity', []);
+  granularity.select.addEventListener('change', () =>
+    controller.setGranularity(granularity.select.value as Granularity)
+  );
+
+  // Multi-select of which granularities appear as pills on the slider.
+  const granRow = document.createElement('div');
+  granRow.className = 'ts-field';
+  const granLabel = document.createElement('span');
+  granLabel.textContent = 'Show on slider';
+  const granGroup = document.createElement('div');
+  granGroup.className = 'ts-check-group';
+  const granChecks = new Map<Granularity, HTMLInputElement>();
+  for (const g of GRANULARITIES) {
+    const item = document.createElement('label');
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.value = g;
+    const text = document.createElement('span');
+    text.textContent = label(g);
+    item.append(input, text);
+    granGroup.appendChild(item);
+    granChecks.set(g, input);
+    input.addEventListener('change', () => {
+      const selected = GRANULARITIES.filter((x) => granChecks.get(x)!.checked);
+      if (selected.length === 0) {
+        // Never allow an empty set; revert this toggle.
+        input.checked = true;
+        return;
+      }
+      controller.setGranularities(selected);
+      syncGranularitySelect();
+    });
+  }
+  granRow.append(granLabel, granGroup);
+
+  const speed = field('Speed (ms/step)', '', 'number');
+  speed.input.min = '100';
+  speed.input.step = '100';
+  speed.input.addEventListener('change', () => {
+    const value = parseInt(speed.input.value, 10);
+    if (!Number.isNaN(value)) controller.setSpeed(value);
+  });
+
+  const loop = checkboxField('Loop playback');
+  loop.input.addEventListener('change', () => controller.setLoop(loop.input.checked));
+
+  const theme = selectField('Theme', [
+    { value: 'auto', label: 'Auto' },
+    { value: 'light', label: 'Light' },
+    { value: 'dark', label: 'Dark' },
+  ]);
+  theme.select.addEventListener('change', () =>
+    controller.setTheme(theme.select.value as 'auto' | 'light' | 'dark')
+  );
+
+  const dateFormat = field('Date format', '');
+  dateFormat.input.addEventListener('change', () =>
+    controller.setDateFormat(dateFormat.input.value.trim() || undefined)
+  );
+
+  const autoPlay = checkboxField('Auto-play on load');
+  autoPlay.input.addEventListener('change', () => controller.setAutoPlay(autoPlay.input.checked));
+
+  fields.append(
+    granularity.row,
+    granRow,
+    speed.row,
+    loop.row,
+    theme.row,
+    dateFormat.row,
+    autoPlay.row
+  );
+  section.append(title, fields);
+
+  // Repopulate the active-granularity options from the currently offered set.
+  const syncGranularitySelect = (): void => {
+    const offered = controller.getGranularities();
+    const active = controller.getState().granularity;
+    granularity.select.replaceChildren();
+    for (const g of offered) {
+      const opt = document.createElement('option');
+      opt.value = g;
+      opt.textContent = label(g);
+      granularity.select.appendChild(opt);
+    }
+    granularity.select.value = active;
+  };
+
+  const sync = (): void => {
+    const state = controller.getState();
+    syncGranularitySelect();
+    const offered = controller.getGranularities();
+    granChecks.forEach((input, g) => (input.checked = offered.includes(g)));
+    speed.input.value = String(state.speed);
+    loop.input.checked = state.loop;
+    theme.select.value = controller.getTheme();
+    dateFormat.input.placeholder = controller.getDateFormat();
+    autoPlay.input.checked = controller.getAutoPlay();
   };
   sync();
 

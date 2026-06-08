@@ -494,6 +494,60 @@
   flex: 1 1 auto;
 }
 
+/* ----- Settings ----- */
+.ts-settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--ts-border);
+}
+
+/* Checkbox rows lay the box and label side by side (the compound selector wins
+ * over the `.ts-field` column default regardless of source order). */
+.ts-field.ts-field-check {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+}
+
+.ts-field.ts-field-check input {
+  flex: 0 0 auto;
+  accent-color: var(--ts-accent);
+  cursor: pointer;
+}
+
+/* Inline group of granularity checkboxes (H/D/M/Y). */
+.ts-check-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.ts-check-group label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--ts-fg-muted);
+  cursor: pointer;
+}
+
+.ts-check-group input {
+  accent-color: var(--ts-accent);
+  cursor: pointer;
+}
+
+/* "Layers" section heading above the layer list. */
+.ts-layers-title {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--ts-fg);
+  margin-bottom: 6px;
+}
+
 /* ----- Add-data form ----- */
 .ts-add-form {
   display: flex;

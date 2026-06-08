@@ -9,11 +9,14 @@ export interface PillsHandle {
   root: HTMLElement;
   /** Highlight the pill matching the active granularity. */
   syncActive(): void;
+  /** Rebuild the pill buttons from the controller's current granularity set. */
+  rebuild(): void;
 }
 
 /**
  * Builds the H/D/M/Y zoom pills. Selecting one changes the control's
- * granularity.
+ * granularity. The pill set can be rebuilt live via {@link PillsHandle.rebuild}
+ * when the offered granularities change.
  *
  * @param controller - The control's UI-facing API
  * @returns A pills handle for syncing the active state
@@ -25,17 +28,23 @@ export function createPills(controller: DockController): PillsHandle {
   root.setAttribute('aria-label', 'Time granularity');
 
   const buttons = new Map<Granularity, HTMLButtonElement>();
-  for (const granularity of controller.getGranularities()) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'ts-pill';
-    btn.textContent = granularityCode(granularity);
-    btn.title = granularity;
-    btn.dataset.granularity = granularity;
-    btn.addEventListener('click', () => controller.setGranularity(granularity));
-    buttons.set(granularity, btn);
-    root.appendChild(btn);
-  }
+
+  const rebuild = (): void => {
+    buttons.clear();
+    root.replaceChildren();
+    for (const granularity of controller.getGranularities()) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'ts-pill';
+      btn.textContent = granularityCode(granularity);
+      btn.title = granularity;
+      btn.dataset.granularity = granularity;
+      btn.addEventListener('click', () => controller.setGranularity(granularity));
+      buttons.set(granularity, btn);
+      root.appendChild(btn);
+    }
+    syncActive();
+  };
 
   const syncActive = (): void => {
     const active = controller.getState().granularity;
@@ -46,6 +55,6 @@ export function createPills(controller: DockController): PillsHandle {
     });
   };
 
-  syncActive();
-  return { root, syncActive };
+  rebuild();
+  return { root, syncActive, rebuild };
 }

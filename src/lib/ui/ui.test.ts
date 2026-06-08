@@ -21,13 +21,19 @@ function baseController(overrides: Partial<DockController> = {}): DockController
     getState: () => ({ ...STATE }),
     getGranularities: () => ['hour', 'day', 'month', 'year'],
     getDateFormat: () => 'YYYY-MM-DD',
+    getTheme: () => 'auto',
+    getAutoPlay: () => false,
     goTo: vi.fn(),
     next: vi.fn(),
     prev: vi.fn(),
     togglePlayback: vi.fn(),
     setSpeed: vi.fn(),
     setLoop: vi.fn(),
+    setAutoPlay: vi.fn(),
+    setTheme: vi.fn(),
+    setDateFormat: vi.fn(),
     setGranularity: vi.fn(),
+    setGranularities: vi.fn(),
     setRange: vi.fn(),
     collapse: vi.fn(),
     getSources: () => [],
@@ -118,6 +124,127 @@ describe('layersPopover', () => {
   it('shows an empty state when there are no layers', () => {
     const popover = createLayersPopover(baseController());
     expect(popover.root.querySelector('.ts-layer-empty')).not.toBeNull();
+    popover.destroy();
+  });
+
+  it('renders the settings section and wires controls to controller setters', () => {
+    const setGranularity = vi.fn();
+    const setSpeed = vi.fn();
+    const setLoop = vi.fn();
+    const setTheme = vi.fn();
+    const setDateFormat = vi.fn();
+    const setAutoPlay = vi.fn();
+    const controller = baseController({
+      setGranularity,
+      setSpeed,
+      setLoop,
+      setTheme,
+      setDateFormat,
+      setAutoPlay,
+    });
+
+    const popover = createLayersPopover(controller);
+    document.body.appendChild(popover.root);
+    const section = popover.root.querySelector('.ts-settings-section') as HTMLElement;
+    expect(section).not.toBeNull();
+
+    const selects = section.querySelectorAll('select');
+    const [granularitySel, themeSel] = selects;
+    granularitySel.value = 'month';
+    granularitySel.dispatchEvent(new Event('change'));
+    expect(setGranularity).toHaveBeenCalledWith('month');
+
+    themeSel.value = 'dark';
+    themeSel.dispatchEvent(new Event('change'));
+    expect(setTheme).toHaveBeenCalledWith('dark');
+
+    const speedInput = section.querySelector('input[type="number"]') as HTMLInputElement;
+    speedInput.value = '500';
+    speedInput.dispatchEvent(new Event('change'));
+    expect(setSpeed).toHaveBeenCalledWith(500);
+
+    // Loop / auto-play live in single-checkbox rows (.ts-field-check); the
+    // granularity multi-select checkboxes live in .ts-check-group.
+    const [loopCheck, autoPlayCheck] = section.querySelectorAll(
+      '.ts-field-check input[type="checkbox"]'
+    ) as unknown as HTMLInputElement[];
+    loopCheck.checked = false;
+    loopCheck.dispatchEvent(new Event('change'));
+    expect(setLoop).toHaveBeenCalledWith(false);
+
+    autoPlayCheck.checked = true;
+    autoPlayCheck.dispatchEvent(new Event('change'));
+    expect(setAutoPlay).toHaveBeenCalledWith(true);
+
+    const dateFormatInput = section.querySelector('input[type="text"]') as HTMLInputElement;
+    dateFormatInput.value = 'YYYY';
+    dateFormatInput.dispatchEvent(new Event('change'));
+    expect(setDateFormat).toHaveBeenCalledWith('YYYY');
+
+    popover.destroy();
+  });
+
+  it('multi-selects which granularities show on the slider', () => {
+    const setGranularities = vi.fn();
+    const popover = createLayersPopover(baseController({ setGranularities }));
+    document.body.appendChild(popover.root);
+    const section = popover.root.querySelector('.ts-settings-section') as HTMLElement;
+
+    const checks = section.querySelectorAll(
+      '.ts-check-group input[type="checkbox"]'
+    ) as unknown as HTMLInputElement[];
+    expect(checks).toHaveLength(4);
+    // All four start checked (the mock offers all granularities).
+    expect([...checks].every((c) => c.checked)).toBe(true);
+
+    // Unchecking 'hour' applies the remaining three in canonical order.
+    checks[0].checked = false;
+    checks[0].dispatchEvent(new Event('change'));
+    expect(setGranularities).toHaveBeenCalledWith(['day', 'month', 'year']);
+
+    popover.destroy();
+  });
+
+  it('refuses to clear the last granularity, reverting the toggle', () => {
+    const setGranularities = vi.fn();
+    const popover = createLayersPopover(
+      baseController({ getGranularities: () => ['day'], setGranularities })
+    );
+    document.body.appendChild(popover.root);
+    const section = popover.root.querySelector('.ts-settings-section') as HTMLElement;
+    const dayCheck = section.querySelector(
+      '.ts-check-group input[value="day"]'
+    ) as HTMLInputElement;
+
+    dayCheck.checked = false;
+    dayCheck.dispatchEvent(new Event('change'));
+    expect(setGranularities).not.toHaveBeenCalled();
+    expect(dayCheck.checked).toBe(true);
+
+    popover.destroy();
+  });
+
+  it('offers a None colormap option for multi-band COG imagery', () => {
+    const addSource = vi.fn(() => 'id');
+    const popover = createLayersPopover(baseController({ addSource }));
+    document.body.appendChild(popover.root);
+    (popover.root.querySelector('.ts-add-data') as HTMLButtonElement).click();
+
+    // COG is the default type; its colormap select should include an empty None.
+    const cmap = popover.root.querySelector('.ts-add-form .ts-cmap') as HTMLSelectElement;
+    const noneOption = [...cmap.options].find((o) => o.value === '');
+    expect(noneOption).toBeDefined();
+
+    const url = popover.root.querySelectorAll(
+      '.ts-add-form .ts-form-fields .ts-field input'
+    )[2] as HTMLInputElement;
+    url.value = 'https://e/{date:YYYY-MM-DD}.tif';
+    cmap.value = '';
+    (popover.root.querySelector('.ts-add-submit') as HTMLButtonElement).click();
+
+    expect(addSource).toHaveBeenCalledTimes(1);
+    expect((addSource.mock.calls[0][0] as { colormap?: string }).colormap).toBeUndefined();
+
     popover.destroy();
   });
 });

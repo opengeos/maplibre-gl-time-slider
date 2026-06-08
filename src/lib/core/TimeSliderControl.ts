@@ -30,6 +30,7 @@ interface ResolvedOptions {
   theme: 'auto' | 'light' | 'dark';
   className?: string;
   collapsible: boolean;
+  autoPlay: boolean;
   beforeId?: string;
   sources: SourceSpec[];
   onChange?: (date: Date) => void;
@@ -98,6 +99,7 @@ export class TimeSliderControl implements IControl, DockController {
       theme: options.theme ?? 'auto',
       className: options.className,
       collapsible: options.collapsible ?? true,
+      autoPlay: options.autoPlay ?? false,
       beforeId: options.beforeId,
       sources: options.sources ?? [],
       onChange: options.onChange,
@@ -150,6 +152,11 @@ export class TimeSliderControl implements IControl, DockController {
 
     this._applyCollapsed();
     this._syncAll();
+
+    // Kick off playback once everything is wired up, when requested.
+    if (this._options.autoPlay) {
+      this.play();
+    }
     return this._container;
   }
 
@@ -207,6 +214,20 @@ export class TimeSliderControl implements IControl, DockController {
    */
   getDateFormat(): string {
     return this._options.dateFormat ?? this._defaultDateFormat();
+  }
+
+  /**
+   * Returns the active color theme.
+   */
+  getTheme(): 'auto' | 'light' | 'dark' {
+    return this._options.theme;
+  }
+
+  /**
+   * Returns whether playback starts automatically when the control is added.
+   */
+  getAutoPlay(): boolean {
+    return this._options.autoPlay;
   }
 
   /**
@@ -492,6 +513,48 @@ export class TimeSliderControl implements IControl, DockController {
     this._emit('statechange');
   }
 
+  /**
+   * Enables or disables auto-play (whether playback starts when the control is
+   * added). Updating this after the control is added affects future re-adds and
+   * the serialized config; it does not start or stop the current playback.
+   *
+   * @param enabled - Whether to auto-play on add
+   */
+  setAutoPlay(enabled: boolean): void {
+    this._options.autoPlay = enabled;
+    this._emit('statechange');
+  }
+
+  // ----- Appearance -------------------------------------------------------
+
+  /**
+   * Sets the color theme and applies it to the dock live.
+   *
+   * @param theme - `'auto'` (system preference), `'light'`, or `'dark'`
+   */
+  setTheme(theme: 'auto' | 'light' | 'dark'): void {
+    this._options.theme = theme;
+    const root = this._view?.root;
+    if (root) {
+      root.classList.toggle('ts-theme-light', theme === 'light');
+      root.classList.toggle('ts-theme-dark', theme === 'dark');
+    }
+    this._emit('statechange');
+  }
+
+  /**
+   * Sets the token format for the current-date label, applying it live. Pass
+   * `undefined` to fall back to the granularity-derived default.
+   *
+   * @param format - A date token format string, or `undefined` for the default
+   */
+  setDateFormat(format?: string): void {
+    this._options.dateFormat = format;
+    this._view?.syncRange();
+    this._view?.syncDate();
+    this._emit('statechange');
+  }
+
   // ----- Range / granularity ----------------------------------------------
 
   /**
@@ -510,6 +573,25 @@ export class TimeSliderControl implements IControl, DockController {
     this._view?.syncDate();
     this._notifyDateChanged(s.currentDate, prev);
     this._emit('granularitychange');
+    this._emit('statechange');
+  }
+
+  /**
+   * Sets which granularities are offered as zoom pills, rebuilding them live.
+   * The set is kept in canonical order (hour, day, month, year); empty input is
+   * ignored. If the active granularity is dropped, it switches to the first
+   * remaining one.
+   *
+   * @param granularities - The granularities to offer
+   */
+  setGranularities(granularities: Granularity[]): void {
+    const ordered = GRANULARITIES.filter((g) => granularities.includes(g));
+    if (ordered.length === 0) return;
+    this._options.granularities = ordered;
+    this._view?.syncGranularities();
+    if (!ordered.includes(this._state.granularity)) {
+      this.setGranularity(ordered[0]);
+    }
     this._emit('statechange');
   }
 
@@ -640,6 +722,7 @@ export class TimeSliderControl implements IControl, DockController {
       currentDate: s.currentDate.toISOString(),
       speed: s.speed,
       loop: s.loop,
+      autoPlay: this._options.autoPlay,
       collapsed: s.collapsed,
       theme: this._options.theme,
       dateFormat: this._options.dateFormat,
@@ -675,6 +758,7 @@ export class TimeSliderControl implements IControl, DockController {
     );
     s.speed = Math.max(100, config.speed);
     s.loop = config.loop;
+    if (config.autoPlay !== undefined) this._options.autoPlay = config.autoPlay;
     if (config.collapsed !== undefined) s.collapsed = config.collapsed;
     if (config.granularities) this._options.granularities = [...config.granularities];
     if (config.theme) this._options.theme = config.theme;

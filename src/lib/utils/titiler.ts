@@ -20,9 +20,9 @@ export interface TiTilerOptions {
   rescale?: [number, number];
 
   /**
-   * Colormap name to apply.
+   * Colormap name to apply. When omitted (or empty), no colormap is applied,
+   * which is the correct behavior for RGB / multi-band imagery.
    * @see https://cogeotiff.github.io/rio-tiler/colormap/
-   * @default 'viridis'
    */
   colormap?: string;
 
@@ -62,7 +62,7 @@ export interface TiTilerOptions {
  *
  * @example
  * ```typescript
- * // Basic usage with default viridis colormap
+ * // Basic usage (no colormap; suitable for RGB / multi-band COGs)
  * const tileUrl = buildTiTilerTileUrl({
  *   url: 'https://example.com/my-cog.tif',
  * });
@@ -88,7 +88,7 @@ export function buildTiTilerTileUrl(options: TiTilerOptions): string {
   const {
     url,
     endpoint = 'https://titiler.d2s.org',
-    colormap = 'viridis',
+    colormap,
     rescale,
     bidx,
     nodata,

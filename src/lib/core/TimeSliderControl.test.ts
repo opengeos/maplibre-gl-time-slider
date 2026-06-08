@@ -152,6 +152,19 @@ describe('TimeSliderControl playback', () => {
     vi.advanceTimersByTime(500);
     expect(iso(control.getCurrentDate())).toBe('2024-04-19T00:00:00.000Z');
   });
+
+  it('autoPlay starts playback once the control is added', () => {
+    const { control } = mount({ autoPlay: true, speed: 1000 });
+    expect(control.getState().isPlaying).toBe(true);
+    vi.advanceTimersByTime(1000);
+    expect(iso(control.getCurrentDate())).toBe('2024-04-19T00:00:00.000Z');
+    control.pause();
+  });
+
+  it('does not auto-play by default', () => {
+    const { control } = mount();
+    expect(control.getState().isPlaying).toBe(false);
+  });
 });
 
 describe('TimeSliderControl sources', () => {
@@ -214,6 +227,78 @@ describe('TimeSliderControl config', () => {
     fresh.setConfig(config);
     expect(fresh.getState().collapsed).toBe(true);
     expect(fresh.getConfig().theme).toBe('dark');
+  });
+
+  it('round-trips autoPlay through getConfig / setConfig', () => {
+    const { control } = mount({ autoPlay: true });
+    expect(control.getConfig().autoPlay).toBe(true);
+
+    const fresh = new TimeSliderControl({ ...BASE });
+    const stub = createStubMap();
+    fresh.onAdd(stub.map);
+    expect(fresh.getAutoPlay()).toBe(false);
+    fresh.setConfig(control.getConfig());
+    expect(fresh.getAutoPlay()).toBe(true);
+  });
+});
+
+describe('TimeSliderControl appearance', () => {
+  it('setTheme updates the option and toggles dock theme classes live', () => {
+    const { control, stub } = mount({ theme: 'auto' });
+    const dock = stub.container.querySelector('.maplibregl-time-slider-dock') as HTMLElement;
+
+    control.setTheme('dark');
+    expect(control.getTheme()).toBe('dark');
+    expect(dock.classList.contains('ts-theme-dark')).toBe(true);
+    expect(dock.classList.contains('ts-theme-light')).toBe(false);
+
+    control.setTheme('light');
+    expect(dock.classList.contains('ts-theme-light')).toBe(true);
+    expect(dock.classList.contains('ts-theme-dark')).toBe(false);
+
+    control.setTheme('auto');
+    expect(dock.classList.contains('ts-theme-light')).toBe(false);
+    expect(dock.classList.contains('ts-theme-dark')).toBe(false);
+  });
+
+  it('setDateFormat overrides the granularity-derived default and resets to it', () => {
+    const { control } = mount({ granularity: 'day' });
+    expect(control.getDateFormat()).toBe('YYYY MMM DD');
+
+    control.setDateFormat('YYYY-MM-DD');
+    expect(control.getDateFormat()).toBe('YYYY-MM-DD');
+
+    control.setDateFormat(undefined);
+    expect(control.getDateFormat()).toBe('YYYY MMM DD');
+  });
+
+  it('setAutoPlay updates the stored preference without changing playback', () => {
+    const { control } = mount();
+    expect(control.getAutoPlay()).toBe(false);
+    control.setAutoPlay(true);
+    expect(control.getAutoPlay()).toBe(true);
+    expect(control.getState().isPlaying).toBe(false);
+  });
+
+  it('setGranularities updates the offered set in canonical order', () => {
+    const { control, stub } = mount({ granularities: ['hour', 'day', 'month', 'year'] });
+    control.setGranularities(['year', 'day']);
+    expect(control.getGranularities()).toEqual(['day', 'year']);
+    const pills = stub.container.querySelectorAll('.ts-pill');
+    expect(pills).toHaveLength(2);
+  });
+
+  it('setGranularities switches the active granularity when it is dropped', () => {
+    const { control } = mount({ granularity: 'hour', granularities: ['hour', 'day'] });
+    expect(control.getState().granularity).toBe('hour');
+    control.setGranularities(['month', 'year']);
+    expect(control.getState().granularity).toBe('month');
+  });
+
+  it('setGranularities ignores an empty set', () => {
+    const { control } = mount({ granularities: ['day', 'month'] });
+    control.setGranularities([]);
+    expect(control.getGranularities()).toEqual(['day', 'month']);
   });
 });
 

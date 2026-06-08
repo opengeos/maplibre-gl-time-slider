@@ -12,6 +12,10 @@ export interface DockController {
   getGranularities(): Granularity[];
   /** Token format for the large date display. */
   getDateFormat(): string;
+  /** Current color theme. */
+  getTheme(): 'auto' | 'light' | 'dark';
+  /** Whether playback starts automatically when the control is added. */
+  getAutoPlay(): boolean;
 
   /** Navigate to a specific date (snapped internally). */
   goTo(date: Date): void;
@@ -25,8 +29,16 @@ export interface DockController {
   setSpeed(ms: number): void;
   /** Enable/disable looping. */
   setLoop(enabled: boolean): void;
+  /** Enable/disable auto-play on add. */
+  setAutoPlay(enabled: boolean): void;
+  /** Set the color theme (applied live). */
+  setTheme(theme: 'auto' | 'light' | 'dark'): void;
+  /** Set the date-label token format (applied live; undefined = default). */
+  setDateFormat(format?: string): void;
   /** Change the active granularity. */
   setGranularity(granularity: Granularity): void;
+  /** Set which granularities are offered as pills. */
+  setGranularities(granularities: Granularity[]): void;
   /** Update the timeline range (and optionally interval/granularity). */
   setRange(
     start: Date | string,
@@ -62,6 +74,8 @@ export interface DockView {
   syncPlayState(): void;
   /** Update the active granularity pill. */
   syncGranularity(): void;
+  /** Rebuild the granularity pills after the offered set changes. */
+  syncGranularities(): void;
   /** Sync the speed/loop inputs without re-rendering ticks. */
   syncControls(): void;
   /** Re-render the axis ticks and playback inputs (after a range/granularity change). */
