@@ -1,4 +1,9 @@
-import type { FilterSpecification } from 'maplibre-gl';
+import type {
+  CircleLayerSpecification,
+  FillLayerSpecification,
+  FilterSpecification,
+  LineLayerSpecification,
+} from 'maplibre-gl';
 import type { GeoJsonSourceSpec, GeoJsonTimeWindow } from '../core/types';
 import { addUnits } from '../time/granularity';
 import { clamp } from '../utils/helpers';
@@ -26,7 +31,11 @@ const GEOMETRY_CONFIG = {
  * unstyled layer a sensible, clearly visible appearance. User-supplied paint
  * always overrides these.
  */
-const DEFAULT_PAINT: Record<keyof typeof GEOMETRY_CONFIG, Record<string, unknown>> = {
+const DEFAULT_PAINT: {
+  circle: CircleLayerSpecification['paint'];
+  fill: FillLayerSpecification['paint'];
+  line: LineLayerSpecification['paint'];
+} = {
   circle: {
     'circle-radius': 6,
     'circle-color': '#ff5533',

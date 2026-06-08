@@ -173,6 +173,7 @@ describe('GeoJsonAdapter', () => {
     const layerArg = (map.addLayer as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(layerArg.paint['circle-radius']).toBe(6);
     expect(layerArg.paint['circle-color']).toBe('#ff5533');
+    expect(layerArg.paint['circle-opacity']).toBe(1);
   });
 
   it('lets a spec override the default paint', () => {
