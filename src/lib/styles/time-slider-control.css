@@ -108,6 +108,14 @@
   box-sizing: border-box;
   overflow: hidden;
   max-width: 100%;
+  /* Never exceed the dynamic viewport. On mobile the wrapper height can resolve
+   * to the large viewport (URL bar excluded) when the map fills the screen via
+   * `height: 100%` or a pixel value, which pushes the docked control rows below
+   * the visible (small) viewport. Capping here keeps the dock on-screen for
+   * every sizing path; the flexible map child absorbs the difference.
+   * `100vh` is the fallback where `dvh` is unsupported. */
+  max-height: 100vh;
+  max-height: 100dvh;
 }
 
 /* Dock shell. Overlay by default (fallback); reserve-space layout adds
