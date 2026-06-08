@@ -92,9 +92,44 @@ export function createAxis(controller: DockController): AxisHandle {
   window.addEventListener('mouseup', onUp);
   window.addEventListener('touchend', onUp);
 
+  // Labeled ticks from the most recent render, in left-to-right order. Kept so
+  // the labels can be re-thinned on resize without rebuilding the tick DOM.
+  let labelEls: { el: HTMLElement; fraction: number }[] = [];
+
+  // Minimum gap, in pixels, to leave between two adjacent label boxes.
+  const LABEL_GAP = 6;
+
+  /**
+   * Hides tick labels that would overlap at the track's current pixel width,
+   * keeping a left-to-right subset spaced far enough apart to stay legible.
+   * Skipped when the track has no measurable width (e.g. before layout), which
+   * leaves every label visible until the next resize.
+   */
+  const thinLabels = (): void => {
+    if (labelEls.length === 0) return;
+    const width = track.getBoundingClientRect().width;
+    // Reset before measuring so previously hidden labels can reappear when the
+    // track grows; a hidden element reports zero width.
+    for (const { el } of labelEls) el.style.display = '';
+    if (width === 0) return;
+    // Measure all half-widths first (one layout pass) before mutating display,
+    // so hiding one label never forces a reflow while measuring the next.
+    const halves = labelEls.map(({ el }) => el.getBoundingClientRect().width / 2);
+    let lastRight = -Infinity;
+    labelEls.forEach(({ el, fraction }, i) => {
+      const center = fraction * width;
+      if (center - halves[i] < lastRight + LABEL_GAP) {
+        el.style.display = 'none';
+      } else {
+        lastRight = center + halves[i];
+      }
+    });
+  };
+
   const renderTicks = (): void => {
     const { startDate, endDate, granularity } = controller.getState();
     ticksLayer.replaceChildren();
+    labelEls = [];
     const ticks = generateTicks(startDate, endDate, granularity);
     for (const tick of ticks) {
       const el = document.createElement('div');
@@ -105,10 +140,27 @@ export function createAxis(controller: DockController): AxisHandle {
         label.className = 'ts-tick-label';
         label.textContent = tick.label;
         el.appendChild(label);
+        labelEls.push({ el: label, fraction: tick.fraction });
       }
       ticksLayer.appendChild(el);
     }
+    thinLabels();
   };
+
+  // Re-thin labels when the dock width changes (responsive reflow, window
+  // resize, device rotation) so they never cluster on a narrowed track.
+  let resizeRaf = 0;
+  const observer =
+    typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(() => {
+          if (resizeRaf) return;
+          resizeRaf = requestAnimationFrame(() => {
+            resizeRaf = 0;
+            thinLabels();
+          });
+        })
+      : null;
+  observer?.observe(track);
 
   const setMarker = (): void => {
     const { currentDate, startDate, endDate } = controller.getState();
@@ -121,6 +173,8 @@ export function createAxis(controller: DockController): AxisHandle {
   };
 
   const destroy = (): void => {
+    observer?.disconnect();
+    if (resizeRaf) cancelAnimationFrame(resizeRaf);
     track.removeEventListener('mousedown', onDown);
     track.removeEventListener('touchstart', onDown);
     window.removeEventListener('mousemove', onMove);
