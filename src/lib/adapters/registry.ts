@@ -1,5 +1,5 @@
 import type { CustomSourceSpec, ResolvedSourceSpec, SourceSpec } from '../core/types';
-import { generateId } from '../utils/helpers';
+import { clamp, generateId } from '../utils/helpers';
 import { BaseAdapter } from './BaseAdapter';
 import { CogAdapter } from './CogAdapter';
 import { XyzAdapter } from './XyzAdapter';
@@ -28,6 +28,8 @@ function createResolvedAdapter(
       return new WmsAdapter(spec, ctx);
     case 'geojson':
       return new GeoJsonAdapter(spec, ctx);
+    default:
+      throw new Error(`Unsupported source type: ${(spec as { type: string }).type}`);
   }
 }
 
@@ -69,13 +71,29 @@ class CustomAdapter extends BaseAdapter {
       return;
     }
     const resolved = await this.spec.resolve(date);
+    // If the resolved type changed (e.g. xyz -> geojson), the old adapter class
+    // can no longer render it: tear it down and build the matching adapter.
+    if (this.inner.spec.type !== resolved.type) {
+      this.inner.remove();
+      this.inner = createResolvedAdapter(
+        {
+          ...resolved,
+          id: this.id,
+          opacity: resolved.opacity ?? this.opacity,
+          beforeId: resolved.beforeId ?? this.beforeId,
+        },
+        this.ctx
+      );
+      await this.inner.add(date);
+      return;
+    }
     Object.assign(this.inner.spec as unknown as Record<string, unknown>, resolved);
     await this.inner.update(date);
   }
 
   setOpacity(opacity: number): void {
-    this.opacity = opacity;
-    this.inner?.setOpacity(opacity);
+    this.opacity = clamp(opacity, 0, 1);
+    this.inner?.setOpacity(this.opacity);
   }
 
   remove(): void {

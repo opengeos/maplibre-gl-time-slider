@@ -6,6 +6,15 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 const EARTHQUAKE_DATA_URL =
   'https://maplibre.org/maplibre-gl-js/docs/assets/significant-earthquakes-2015.geojson';
 
+/** Escapes a value for safe interpolation into popup HTML. */
+function esc(value: string | number): string {
+  return String(value).replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string
+  );
+}
+
 const map = new maplibregl.Map({
   container: 'map',
   style: {
@@ -104,7 +113,9 @@ map.on('load', () => {
     });
     new maplibregl.Popup()
       .setLngLat(coordinates as [number, number])
-      .setHTML(`<strong>Magnitude ${mag}</strong><br>${place}<br><small>${date}</small>`)
+      .setHTML(
+        `<strong>Magnitude ${esc(mag)}</strong><br>${esc(place)}<br><small>${esc(date)}</small>`
+      )
       .addTo(map);
   });
 

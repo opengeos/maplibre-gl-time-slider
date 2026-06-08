@@ -99,8 +99,12 @@
   height: 20px;
 }
 
-/* Reserve-space layout wrapper: a flex column holding the map then the dock. */
+/* Reserve-space layout wrapper: a flex column holding the map then the dock.
+ * (The control also sets these inline; declared here so the .ts-docked flex
+ * sizing works even if inline styles are stripped.) */
 .maplibregl-time-slider-layout {
+  display: flex;
+  flex-direction: column;
   box-sizing: border-box;
   overflow: hidden;
   max-width: 100%;

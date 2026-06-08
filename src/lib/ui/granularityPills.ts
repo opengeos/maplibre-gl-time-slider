@@ -40,7 +40,9 @@ export function createPills(controller: DockController): PillsHandle {
   const syncActive = (): void => {
     const active = controller.getState().granularity;
     buttons.forEach((btn, granularity) => {
-      btn.classList.toggle('ts-active', granularity === active);
+      const isActive = granularity === active;
+      btn.classList.toggle('ts-active', isActive);
+      btn.setAttribute('aria-pressed', String(isActive));
     });
   };
 

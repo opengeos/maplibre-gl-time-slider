@@ -164,4 +164,31 @@ describe('createAdapter', () => {
     const srcArg = (map.addSource as ReturnType<typeof vi.fn>).mock.calls[0][1];
     expect(srcArg.tiles[0]).toBe('https://t/{z}/{x}/{y}.png?y=2024');
   });
+
+  it('rebuilds the inner adapter when a custom source changes type', async () => {
+    const { map } = createStubMap();
+    const adapter = createAdapter(
+      {
+        type: 'custom',
+        id: 'cust2',
+        resolve: (date) =>
+          date.getUTCDate() === 18
+            ? { type: 'xyz', tiles: 'https://t/{z}/{x}/{y}.png' }
+            : { type: 'geojson', data: 'https://x.geojson', timeProperty: 'time' },
+      },
+      { map }
+    );
+    await adapter.add(d1); // xyz
+    expect((map.addSource as ReturnType<typeof vi.fn>).mock.calls.at(-1)![1].type).toBe('raster');
+    await adapter.update(d2); // -> geojson
+    expect(map.removeLayer).toHaveBeenCalledWith('cust2');
+    expect((map.addSource as ReturnType<typeof vi.fn>).mock.calls.at(-1)![1].type).toBe('geojson');
+  });
+
+  it('throws on an unsupported source type', () => {
+    const { map } = createStubMap();
+    expect(() => createAdapter({ type: 'bogus' } as never, { map })).toThrow(
+      /Unsupported source type/
+    );
+  });
 });

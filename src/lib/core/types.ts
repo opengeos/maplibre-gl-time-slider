@@ -394,8 +394,9 @@ export interface TimeSliderState {
  * by {@link TimeSliderControl.getConfig} and accepted by
  * {@link TimeSliderControl.setConfig}.
  *
- * Sources are only serializable when their url/tiles fields are token strings
- * (resolver functions cannot be serialized).
+ * Sources are only serializable when their url/tiles fields are token strings;
+ * `custom` sources and function-valued url/tiles cannot be JSON-serialized
+ * (they survive a structured clone / in-memory round-trip but not `JSON.stringify`).
  */
 export interface TimeSliderConfig {
   startDate: string;
@@ -406,6 +407,16 @@ export interface TimeSliderConfig {
   speed: number;
   loop: boolean;
   sources: SourceSpec[];
+  /** Granularities offered as pills. */
+  granularities?: Granularity[];
+  /** Whether the dock is collapsed. */
+  collapsed?: boolean;
+  /** Color theme. */
+  theme?: 'auto' | 'light' | 'dark';
+  /** Date-label token format (undefined = granularity default). */
+  dateFormat?: string;
+  /** Layer to insert managed layers before. */
+  beforeId?: string;
 }
 
 /**

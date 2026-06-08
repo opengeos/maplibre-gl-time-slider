@@ -115,7 +115,14 @@ export function snapToStep(
   const units = unitsBetween(start, clamped, granularity);
   let k = Math.round(units / step) * step;
   k = clamp(k, 0, maxStepMultiple(start, end, interval, granularity));
-  return addUnits(start, granularity, k);
+  // Day-of-month clamping in addUnits (and fractional unit estimates) can still
+  // land a month/year step just past `end`; step back until it is in range.
+  let candidate = addUnits(start, granularity, k);
+  while (candidate.getTime() > end.getTime() && k > 0) {
+    k -= step;
+    candidate = addUnits(start, granularity, k);
+  }
+  return candidate.getTime() < start.getTime() ? new Date(start.getTime()) : candidate;
 }
 
 /**

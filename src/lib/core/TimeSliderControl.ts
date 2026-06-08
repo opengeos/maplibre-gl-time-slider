@@ -10,6 +10,7 @@ import type {
 } from './types';
 import { GRANULARITIES, toDate } from '../time/granularity';
 import { nextStep, prevStep, snapToStep } from '../time/timeline';
+import { clamp } from '../utils/helpers';
 import { createAdapter } from '../adapters/registry';
 import type { SourceAdapter } from '../adapters/types';
 import { createDockView } from '../ui/dock';
@@ -376,9 +377,7 @@ export class TimeSliderControl implements IControl, DockController {
     if (snapped.getTime() === s.currentDate.getTime()) return;
     s.currentDate = snapped;
     this._view?.syncDate();
-    this._dispatch(snapped);
-    this._options.onChange?.(new Date(snapped));
-    this._emit('change');
+    this._notifyDateChanged(snapped);
     this._emit('statechange');
   }
 
@@ -496,12 +495,13 @@ export class TimeSliderControl implements IControl, DockController {
    */
   setGranularity(granularity: Granularity): void {
     const s = this._state;
+    const prev = s.currentDate.getTime();
     s.granularity = granularity;
     s.interval = 1;
     s.currentDate = snapToStep(s.currentDate, s.startDate, s.endDate, s.interval, granularity);
     this._view?.syncGranularity();
     this._view?.syncDate();
-    this._dispatch(s.currentDate);
+    this._notifyDateChanged(s.currentDate, prev);
     this._emit('granularitychange');
     this._emit('statechange');
   }
@@ -522,6 +522,7 @@ export class TimeSliderControl implements IControl, DockController {
     granularity?: Granularity
   ): void {
     const s = this._state;
+    const prev = s.currentDate.getTime();
     s.startDate = toDate(start);
     s.endDate = toDate(end);
     if (interval != null) s.interval = Math.max(1, Math.floor(interval));
@@ -530,7 +531,7 @@ export class TimeSliderControl implements IControl, DockController {
     this._view?.syncRange();
     this._view?.syncGranularity();
     this._view?.syncDate();
-    this._dispatch(s.currentDate);
+    this._notifyDateChanged(s.currentDate, prev);
     this._emit('rangechange');
     this._emit('statechange');
   }
@@ -601,8 +602,12 @@ export class TimeSliderControl implements IControl, DockController {
   setSourceProperty(id: string, patch: Partial<SourceSpec>): void {
     const adapter = this._adapters.find((a) => a.id === id);
     if (!adapter) return;
-    Object.assign(adapter.spec as unknown as Record<string, unknown>, patch);
-    const rest = { ...patch } as Record<string, unknown>;
+    const merged = { ...patch } as Record<string, unknown>;
+    if ('opacity' in merged && typeof merged.opacity === 'number') {
+      merged.opacity = clamp(merged.opacity, 0, 1);
+    }
+    Object.assign(adapter.spec as unknown as Record<string, unknown>, merged);
+    const rest = { ...merged };
     if ('opacity' in rest && typeof rest.opacity === 'number') {
       adapter.setOpacity(rest.opacity);
       delete rest.opacity;
@@ -624,9 +629,14 @@ export class TimeSliderControl implements IControl, DockController {
       endDate: s.endDate.toISOString(),
       interval: s.interval,
       granularity: s.granularity,
+      granularities: [...this._options.granularities],
       currentDate: s.currentDate.toISOString(),
       speed: s.speed,
       loop: s.loop,
+      collapsed: s.collapsed,
+      theme: this._options.theme,
+      dateFormat: this._options.dateFormat,
+      beforeId: this._options.beforeId,
       sources: this.getSources(),
     };
   }
@@ -658,6 +668,11 @@ export class TimeSliderControl implements IControl, DockController {
     );
     s.speed = Math.max(100, config.speed);
     s.loop = config.loop;
+    if (config.collapsed !== undefined) s.collapsed = config.collapsed;
+    if (config.granularities) this._options.granularities = [...config.granularities];
+    if (config.theme) this._options.theme = config.theme;
+    if (config.dateFormat !== undefined) this._options.dateFormat = config.dateFormat;
+    if (config.beforeId !== undefined) this._options.beforeId = config.beforeId;
 
     if (this._map) {
       for (const spec of config.sources) {
@@ -669,7 +684,11 @@ export class TimeSliderControl implements IControl, DockController {
       this._options.sources = [...config.sources];
     }
 
+    this._applyCollapsed();
     this._syncAll();
+    // Adapters were (re)created above, so notify without re-dispatching.
+    this._options.onChange?.(new Date(s.currentDate));
+    this._emit('change');
     this._emit('statechange');
   }
 
@@ -723,6 +742,21 @@ export class TimeSliderControl implements IControl, DockController {
     for (const adapter of this._adapters) {
       void Promise.resolve(adapter.update(date)).catch(() => undefined);
     }
+  }
+
+  /**
+   * Notifies listeners (adapters, `onChange`, `change` event) of a date change.
+   * When `prevTime` is given, no-ops if the date did not actually change, so
+   * `setGranularity`/`setRange` only fire when re-snapping moved the marker.
+   *
+   * @param date - The new current date
+   * @param prevTime - Optional previous date timestamp for change detection
+   */
+  private _notifyDateChanged(date: Date, prevTime?: number): void {
+    if (prevTime !== undefined && date.getTime() === prevTime) return;
+    this._dispatch(date);
+    this._options.onChange?.(new Date(date));
+    this._emit('change');
   }
 
   /**

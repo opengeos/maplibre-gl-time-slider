@@ -68,6 +68,7 @@ function whenResolved<T>(value: T | Promise<T>, fn: (v: T) => void): void | Prom
 export abstract class RasterAdapter extends BaseAdapter {
   protected tileSize = 256;
   protected attribution?: string;
+  private requestSeq = 0;
 
   /**
    * Builds the tile URL template for a given date.
@@ -77,37 +78,51 @@ export abstract class RasterAdapter extends BaseAdapter {
    */
   protected abstract resolveTiles(date: Date): string | Promise<string>;
 
-  add(date: Date): void | Promise<void> {
-    this.lastDate = date;
-    if (this.map.getSource?.(this.id)) return;
-    return whenResolved(this.resolveTiles(date), (tiles) => {
-      if (this.map.getSource?.(this.id)) return;
-      this.map.addSource(this.id, {
+  /**
+   * Creates the raster source + layer if missing, otherwise updates its tiles.
+   */
+  private applyTiles(tiles: string): void {
+    const source = this.map.getSource?.(this.id) as RasterTileSource | undefined;
+    if (source) {
+      if (typeof source.setTiles === 'function') source.setTiles([tiles]);
+      return;
+    }
+    this.map.addSource(this.id, {
+      type: 'raster',
+      tiles: [tiles],
+      tileSize: this.tileSize,
+      ...(this.attribution ? { attribution: this.attribution } : {}),
+    });
+    this.map.addLayer(
+      {
+        id: this.id,
         type: 'raster',
-        tiles: [tiles],
-        tileSize: this.tileSize,
-        ...(this.attribution ? { attribution: this.attribution } : {}),
-      });
-      this.map.addLayer(
-        {
-          id: this.id,
-          type: 'raster',
-          source: this.id,
-          paint: { 'raster-opacity': this.opacity },
-        },
-        this.beforeId
-      );
+        source: this.id,
+        paint: { 'raster-opacity': this.opacity },
+      },
+      this.beforeId
+    );
+  }
+
+  /**
+   * Resolves tiles for a date and applies them, ignoring the result if a newer
+   * request started meanwhile (prevents stale async renders during scrubbing).
+   */
+  private render(date: Date): void | Promise<void> {
+    this.lastDate = date;
+    const seq = ++this.requestSeq;
+    return whenResolved(this.resolveTiles(date), (tiles) => {
+      if (seq !== this.requestSeq) return;
+      this.applyTiles(tiles);
     });
   }
 
+  add(date: Date): void | Promise<void> {
+    return this.render(date);
+  }
+
   update(date: Date): void | Promise<void> {
-    this.lastDate = date;
-    return whenResolved(this.resolveTiles(date), (tiles) => {
-      const source = this.map.getSource?.(this.id) as RasterTileSource | undefined;
-      if (source && typeof source.setTiles === 'function') {
-        source.setTiles([tiles]);
-      }
-    });
+    return this.render(date);
   }
 
   setOpacity(opacity: number): void {

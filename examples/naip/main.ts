@@ -34,7 +34,12 @@ async function fetchTileUrl(year: number): Promise<string> {
   return data.tile_url;
 }
 
+// Track in-flight tile requests so the loader stays visible until they all
+// finish (rapid scrubbing can have several concurrent fetches).
+let pendingTileRequests = 0;
+
 function showLoading(message: string): void {
+  pendingTileRequests += 1;
   let el = document.querySelector('.loading');
   if (!el) {
     el = document.createElement('div');
@@ -45,7 +50,10 @@ function showLoading(message: string): void {
 }
 
 function hideLoading(): void {
-  document.querySelector('.loading')?.remove();
+  pendingTileRequests = Math.max(0, pendingTileRequests - 1);
+  if (pendingTileRequests === 0) {
+    document.querySelector('.loading')?.remove();
+  }
 }
 
 const map = new maplibregl.Map({

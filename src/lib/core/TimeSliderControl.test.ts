@@ -86,6 +86,31 @@ describe('TimeSliderControl state', () => {
     expect(state.interval).toBe(1);
     expect(granchange).toHaveBeenCalledTimes(1);
   });
+
+  it('fires onChange/change when setGranularity moves the current date', () => {
+    const onChange = vi.fn();
+    const change = vi.fn();
+    const { control } = mount({
+      startDate: '2024-01-15T00:00:00Z',
+      endDate: '2024-06-15T00:00:00Z',
+      granularity: 'day',
+      onChange,
+    });
+    control.goTo(new Date('2024-01-20T00:00:00Z'));
+    onChange.mockClear();
+    control.on('change', change);
+    control.setGranularity('month'); // re-snaps Jan 20 -> Jan 15 (nearest month step)
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(change).toHaveBeenCalledTimes(1);
+  });
+
+  it('fires onChange/change when setRange moves the current date', () => {
+    const onChange = vi.fn();
+    const { control } = mount({ onChange });
+    control.setRange('2024-05-01T00:00:00Z', '2024-05-10T00:00:00Z');
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0].toISOString()).toBe('2024-05-01T00:00:00.000Z');
+  });
 });
 
 describe('TimeSliderControl playback', () => {
@@ -173,6 +198,22 @@ describe('TimeSliderControl config', () => {
     control.setConfig(config);
     expect(iso(control.getCurrentDate())).toBe('2024-04-20T00:00:00.000Z');
     expect(control.getSources()).toHaveLength(1);
+  });
+
+  it('serializes and restores control fields (theme, collapsed, granularities)', () => {
+    const { control } = mount({ theme: 'dark', granularities: ['day', 'month'] });
+    control.collapse();
+    const config = control.getConfig();
+    expect(config.theme).toBe('dark');
+    expect(config.collapsed).toBe(true);
+    expect(config.granularities).toEqual(['day', 'month']);
+
+    const fresh = new TimeSliderControl({ ...BASE });
+    const stub = createStubMap();
+    fresh.onAdd(stub.map);
+    fresh.setConfig(config);
+    expect(fresh.getState().collapsed).toBe(true);
+    expect(fresh.getConfig().theme).toBe('dark');
   });
 });
 

@@ -33,16 +33,24 @@ export function TimeSliderControlReact({
 }: TimeSliderControlReactProps): null {
   const controlRef = useRef<TimeSliderControl | null>(null);
 
+  // Keep the latest callbacks in a ref so handlers registered once (in the
+  // create effect) always call the current props, not the first render's.
+  const callbacks = useRef({ onStateChange, onPlay, onPause, onChange: options.onChange });
+  callbacks.current = { onStateChange, onPlay, onPause, onChange: options.onChange };
+
   // Create / destroy the control with the map.
   useEffect(() => {
     if (!map) return;
 
-    const control = new TimeSliderControl(options);
+    const control = new TimeSliderControl({
+      ...options,
+      onChange: (date) => callbacks.current.onChange?.(date),
+    });
     controlRef.current = control;
 
-    if (onStateChange) control.on('statechange', (e) => onStateChange(e.state));
-    if (onPlay) control.on('play', () => onPlay());
-    if (onPause) control.on('pause', () => onPause());
+    control.on('statechange', (e) => callbacks.current.onStateChange?.(e.state));
+    control.on('play', () => callbacks.current.onPlay?.());
+    control.on('pause', () => callbacks.current.onPause?.());
 
     map.addControl(control, 'bottom-left');
 

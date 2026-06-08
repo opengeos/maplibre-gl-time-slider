@@ -5,6 +5,7 @@ import type { DockController } from './types';
 import type { SourceSpec, TimeSliderState } from '../core/types';
 
 const STATE: TimeSliderState = {
+  collapsed: false,
   startDate: new Date('2024-04-18T00:00:00Z'),
   endDate: new Date('2024-04-22T00:00:00Z'),
   currentDate: new Date('2024-04-18T00:00:00Z'),

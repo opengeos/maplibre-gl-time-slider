@@ -74,6 +74,14 @@ describe('snapToStep', () => {
       '2024-04-28T00:00:00.000Z'
     );
   });
+
+  it('never returns a date past the end for non-boundary month starts', () => {
+    const mStart = d('2024-01-31T00:00:00Z');
+    const mEnd = d('2024-02-01T00:00:00Z');
+    const snapped = snapToStep(d('2024-02-01T00:00:00Z'), mStart, mEnd, 1, 'month');
+    expect(snapped.getTime()).toBeGreaterThanOrEqual(mStart.getTime());
+    expect(snapped.getTime()).toBeLessThanOrEqual(mEnd.getTime());
+  });
 });
 
 describe('nextStep / prevStep', () => {

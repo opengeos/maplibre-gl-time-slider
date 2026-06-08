@@ -55,13 +55,28 @@ export function addUnits(date: Date, granularity: Granularity, amount: number): 
       d.setUTCDate(d.getUTCDate() + amount);
       break;
     case 'month':
-      d.setUTCMonth(d.getUTCMonth() + amount);
+      addMonths(d, amount);
       break;
     case 'year':
-      d.setUTCFullYear(d.getUTCFullYear() + amount);
+      addMonths(d, amount * 12);
       break;
   }
   return d;
+}
+
+/**
+ * Adds whole months to a date in UTC, clamping the day-of-month so it never
+ * overflows into the next month (e.g. Jan 31 + 1 month -> Feb 28/29, not Mar 2).
+ *
+ * @param d - The date to mutate
+ * @param months - Number of months to add (may be negative)
+ */
+function addMonths(d: Date, months: number): void {
+  const day = d.getUTCDate();
+  d.setUTCDate(1);
+  d.setUTCMonth(d.getUTCMonth() + months);
+  const maxDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+  d.setUTCDate(Math.min(day, maxDay));
 }
 
 /**

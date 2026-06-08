@@ -30,6 +30,23 @@ describe('addUnits', () => {
     addUnits(base, 'day', 10);
     expect(base.toISOString()).toBe('2024-01-01T00:00:00.000Z');
   });
+
+  it('clamps day-of-month so month/year stepping never overflows', () => {
+    // Jan 31 + 1 month -> Feb 29 (leap) / Feb 28 (non-leap), not Mar 2.
+    expect(addUnits(d('2024-01-31T00:00:00Z'), 'month', 1).toISOString()).toBe(
+      '2024-02-29T00:00:00.000Z'
+    );
+    expect(addUnits(d('2023-01-31T00:00:00Z'), 'month', 1).toISOString()).toBe(
+      '2023-02-28T00:00:00.000Z'
+    );
+    expect(addUnits(d('2024-01-31T00:00:00Z'), 'month', 3).toISOString()).toBe(
+      '2024-04-30T00:00:00.000Z'
+    );
+    // Leap day + 1 year -> Feb 28.
+    expect(addUnits(d('2024-02-29T00:00:00Z'), 'year', 1).toISOString()).toBe(
+      '2025-02-28T00:00:00.000Z'
+    );
+  });
 });
 
 describe('floorToGranularity', () => {

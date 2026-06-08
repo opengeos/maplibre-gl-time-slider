@@ -81,6 +81,7 @@ export function createPlayback(controller: DockController): PlaybackHandle {
     const { speed: spd, loop } = controller.getState();
     speedInput.value = String(spd);
     loopBtn.classList.toggle('ts-active', loop);
+    loopBtn.setAttribute('aria-pressed', String(loop));
   };
 
   syncPlayState();
