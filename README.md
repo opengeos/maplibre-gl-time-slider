@@ -1,6 +1,8 @@
 # maplibre-gl-time-slider
 
-A MapLibre GL JS plugin for visualizing time series vector and raster data with an interactive time slider control.
+A MapLibre GL JS plugin for visualizing time series raster and vector data with a NASA-Worldview-style bottom-docked timeline.
+
+> **v1.0 is a breaking redesign.** The control is now a full-width timeline docked at the bottom of the map. Time is modeled as a continuous **date range + interval** (not a `labels[]` array), and the plugin manages map layers for you through built-in data adapters (COG, XYZ/WMTS, WMS-Time, GeoJSON), with an "Add data" GUI and a callback escape hatch. See [Migrating from 0.x](#migrating-from-0x).
 
 [![npm version](https://badge.fury.io/js/maplibre-gl-time-slider.svg)](https://www.npmjs.com/package/maplibre-gl-time-slider)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -9,16 +11,21 @@ A MapLibre GL JS plugin for visualizing time series vector and raster data with 
 
 ## Features
 
-- Interactive time slider with play/pause controls
-- Support for both vector and raster time series data
-- Built-in TiTiler integration for Cloud Optimized GeoTIFFs (COGs)
-- **Add Layer button** for persisting time periods as permanent layers for comparison
-- Customizable playback speed and loop settings
-- Automatic light/dark theming that follows the system color scheme
-- Control layer ordering with `beforeId` parameter
-- React component and hooks support
-- TypeScript support with full type definitions
-- Lightweight and easy to integrate
+- Full-width, bottom-docked timeline inspired by [NASA Worldview](https://worldview.earthdata.nasa.gov/) that **reserves its own row** (the map shrinks above it, so nothing is overlaid) and **collapses** to a corner toggle
+- Continuous **date range + interval** time model with hour / day / month / year granularities
+- Scrubbable, zoomable axis with a draggable marker and play / pause / loop / speed controls
+- The plugin **manages map layers for you** through built-in data adapters:
+  - **COG** via TiTiler (colormap + rescale)
+  - **XYZ / WMTS** raster tiles
+  - **WMS-Time** (OGC `TIME` parameter)
+  - **GeoJSON** filtered by a time property
+- **"Add data" GUI** to set the timeline range/interval and add layers at runtime (name, id, per-layer opacity, and for COG a colormap dropdown, rescale, and nodata)
+- Time-to-URL templating with tokens (`{YYYY}`, `{MM}`, `{DD}`, `{HH}`, `{date:FORMAT}`) **or** a `(date) => url` function
+- `onChange` callback escape hatch for fully custom wiring
+- Serializable config (`getConfig` / `setConfig`) for sharing state
+- Automatic light/dark theming (with an explicit `theme` override)
+- React component and `useTimeSlider` hook
+- TypeScript-first with full type definitions
 
 ## Installation
 
@@ -44,17 +51,22 @@ const map = new maplibregl.Map({
 
 map.on('load', () => {
   const timeSlider = new TimeSliderControl({
-    title: 'Time Slider',
-    labels: ['2024-01', '2024-02', '2024-03', '2024-04'],
-    speed: 1000,
-    loop: true,
-    onChange: (index, label) => {
-      console.log(`Current: ${label} (index: ${index})`);
-      // Update your map layers here
-    },
+    startDate: '2024-04-18',
+    endDate: '2024-04-28',
+    granularity: 'day',
+    // The plugin creates and updates the layer for you.
+    sources: [
+      {
+        type: 'cog',
+        name: 'Chlorophyll-a',
+        url: 'https://example.com/chla_{date:YYYY-MM-DD}.tif',
+        colormap: 'jet',
+        rescale: [0, 1],
+      },
+    ],
   });
 
-  map.addControl(timeSlider, 'top-right');
+  map.addControl(timeSlider, 'bottom-left');
 });
 ```
 
@@ -72,17 +84,14 @@ function MyMap() {
 
   useEffect(() => {
     if (!mapContainer.current) return;
-
-    const mapInstance = new maplibregl.Map({
+    const instance = new maplibregl.Map({
       container: mapContainer.current,
       style: 'https://demotiles.maplibre.org/style.json',
       center: [0, 0],
       zoom: 2,
     });
-
-    mapInstance.on('load', () => setMap(mapInstance));
-
-    return () => mapInstance.remove();
+    instance.on('load', () => setMap(instance));
+    return () => instance.remove();
   }, []);
 
   return (
@@ -91,11 +100,13 @@ function MyMap() {
       {map && (
         <TimeSliderControlReact
           map={map}
-          title="Time Slider"
-          labels={['2024-01', '2024-02', '2024-03']}
-          onChange={(index, label) => {
-            // Update map layers
-          }}
+          startDate="2024-04-18"
+          endDate="2024-04-28"
+          granularity="day"
+          sources={[
+            { type: 'cog', id: 'chla', url: 'https://example.com/chla_{date:YYYY-MM-DD}.tif' },
+          ]}
+          onChange={(date) => console.log(date)}
         />
       )}
     </>
@@ -103,240 +114,170 @@ function MyMap() {
 }
 ```
 
-## Examples
+There is also a `useTimeSlider(map, options)` hook that creates the control and
+returns a reactive state snapshot plus `play` / `pause` / `goTo` / `next` /
+`prev` / `setGranularity` helpers.
 
-### Vector Data (Filtering by Time)
+## Data sources
 
-Filter vector features by a time property:
+Pass one or more `sources` (or add them later with `addSource`, or via the
+"Add data" button in the UI). Every source maps the current date to data; URL
+fields accept a **token template** or a **`(date) => string` function**.
 
-```typescript
-const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-const timeSlider = new TimeSliderControl({
-  labels: months,
-  onChange: (index, label) => {
-    // Filter vector layer by month
-    map.setFilter('my-layer', ['==', ['get', 'month'], index]);
-  },
-});
-```
-
-### Raster Data (TiTiler Integration)
-
-Display time series raster data using TiTiler:
+### COG (via TiTiler)
 
 ```typescript
-import { TimeSliderControl, buildTiTilerTileUrl } from 'maplibre-gl-time-slider';
-
-const rasterData = {
-  '2024-01': 'https://example.com/cog_2024_01.tif',
-  '2024-02': 'https://example.com/cog_2024_02.tif',
-  '2024-03': 'https://example.com/cog_2024_03.tif',
-};
-
-const labels = Object.keys(rasterData);
-const urls = Object.values(rasterData);
-
-// Add initial raster source
-map.addSource('raster-data', {
-  type: 'raster',
-  tiles: [
-    buildTiTilerTileUrl({
-      url: urls[0],
-      colormap: 'viridis',
-    }),
-  ],
-  tileSize: 256,
-});
-
-map.addLayer({
-  id: 'raster-layer',
-  type: 'raster',
-  source: 'raster-data',
-});
-
-// Create time slider
-const timeSlider = new TimeSliderControl({
-  labels: labels,
-  onChange: (index, label) => {
-    const source = map.getSource('raster-data');
-    source.setTiles([
-      buildTiTilerTileUrl({
-        url: urls[index],
-        colormap: 'viridis',
-      }),
-    ]);
-  },
-});
+{
+  type: 'cog',
+  url: 'https://example.com/{date:YYYY-MM-DD}.tif', // or (date) => url
+  colormap: 'viridis',
+  rescale: [0, 1],
+  nodata: 'nan',
+  opacity: 0.8,
+}
 ```
 
-### Adding Persistent Layers for Comparison
-
-Enable the "Add Layer" button to allow users to persist specific time periods as permanent layers:
+### XYZ / WMTS raster
 
 ```typescript
-let layerCounter = 0;
-
-const timeSlider = new TimeSliderControl({
-  labels: ['2020', '2021', '2022', '2023'],
-  onChange: (index, label) => {
-    // Update the main time slider layer
-    const source = map.getSource('main-raster');
-    source.setTiles([getTileUrlForYear(label)]);
-  },
-  onAddLayer: (index, label, beforeId) => {
-    // Create a persistent layer for the selected time period
-    layerCounter++;
-    const sourceId = `persistent-source-${label}`;
-    const layerId = `Persistent Layer ${label}`;
-
-    // Add source
-    map.addSource(sourceId, {
-      type: 'raster',
-      tiles: [getTileUrlForYear(label)],
-      tileSize: 256,
-    });
-
-    // Add layer before the main time slider layer
-    map.addLayer({
-      id: layerId,
-      type: 'raster',
-      source: sourceId,
-      paint: {
-        'raster-opacity': 0.7,
-      },
-    }, beforeId);
-
-    console.log(`Added persistent layer for ${label}`);
-  },
-  beforeId: 'main-layer-id', // Insert persistent layers before this layer
-});
+{
+  type: 'xyz',
+  tiles: 'https://example.com/{z}/{x}/{y}.png?date={YYYY}-{MM}-{DD}',
+}
 ```
 
-This feature is useful for:
-- Comparing data across multiple time periods
-- Creating side-by-side visualizations
-- Highlighting specific time periods for analysis
-- Building temporal comparisons in the layer control
+`{z}/{x}/{y}` are left untouched; only date tokens are substituted.
+
+### WMS-Time
+
+```typescript
+{
+  type: 'wms',
+  baseUrl: 'https://example.com/wms?service=WMS&request=GetMap&format=image/png',
+  layers: 'temperature',
+  timeFormat: 'YYYY-MM-DD', // appended as TIME=...
+}
+```
+
+### GeoJSON (time filter)
+
+```typescript
+{
+  type: 'geojson',
+  data: 'https://example.com/events.geojson', // URL or FeatureCollection
+  timeProperty: 'time',                        // epoch ms
+  window: { unit: 'month', before: 0, after: 1 },
+  geometry: 'circle',
+  paint: { circle: { 'circle-color': '#de2d26', 'circle-radius': 6 } },
+}
+```
+
+### Custom escape hatch
+
+For anything else, use a `custom` source that resolves a concrete spec per date,
+or the top-level `onChange(date)` callback to drive your own layers.
+
+```typescript
+{ type: 'custom', resolve: (date) => ({ type: 'xyz', tiles: myTemplateFor(date) }) }
+```
+
+## Time tokens
+
+Token strings used in URLs and `dateFormat` (resolved in UTC):
+
+`YYYY` `YY` `MMMM` `MMM` `MM` `M` `DD` `D` `HH` `H` `mm` `m` `ss` `s`, plus the
+`{date:FORMAT}` form inside URLs (e.g. `{date:YYYY-MM-DD}`).
 
 ## API Reference
 
 ### TimeSliderControl
 
-Main control class that implements MapLibre's `IControl` interface.
+Main control class implementing MapLibre's `IControl` interface.
 
 #### Constructor Options
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `labels` | `string[]` | `[]` | Array of labels to display (required) |
-| `title` | `string` | `'Time Slider'` | Title displayed in the panel header |
-| `collapsed` | `boolean` | `true` | Whether to start with panel collapsed |
-| `position` | `string` | `'top-right'` | Control position on the map |
-| `panelWidth` | `number` | `300` | Width of the panel in pixels |
-| `initialIndex` | `number` | `0` | Initial index to start at |
-| `speed` | `number` | `1000` | Playback speed in milliseconds |
-| `loop` | `boolean` | `true` | Whether to loop playback |
-| `className` | `string` | `''` | Custom CSS class name |
-| `onChange` | `function` | - | Callback when index changes: `(index: number, label: string) => void` |
-| `onAddLayer` | `function` | - | Callback when "Add Layer" button is clicked: `(index: number, label: string, beforeId?: string) => void` |
-| `beforeId` | `string` | - | Layer ID to insert new persistent layers before (ensures proper layer ordering) |
+| `startDate` | `Date \| string` | - | Inclusive range start (required) |
+| `endDate` | `Date \| string` | - | Inclusive range end (required) |
+| `interval` | `number` | `1` | Steps between marker positions, in granularity units |
+| `granularity` | `'hour' \| 'day' \| 'month' \| 'year'` | `'day'` | Active granularity |
+| `granularities` | `Granularity[]` | all four | Granularities offered as zoom pills |
+| `initialDate` | `Date \| string` | `startDate` | Date the marker starts at |
+| `speed` | `number` | `1000` | Playback speed in ms per step |
+| `loop` | `boolean` | `true` | Whether playback loops |
+| `theme` | `'auto' \| 'light' \| 'dark'` | `'auto'` | Color theme |
+| `dateFormat` | `string` | by granularity | Token format for the marker's date label. Defaults to a granularity-appropriate format (hour→`YYYY MMM DD HH:00`, day→`YYYY MMM DD`, month→`MMM YYYY`, year→`YYYY`) |
+| `collapsible` | `boolean` | `true` | Show a corner toggle button to collapse/expand the dock |
+| `collapsed` | `boolean` | `false` | Start with the dock collapsed (hidden) |
+| `className` | `string` | - | Extra CSS class on the dock |
+| `sources` | `SourceSpec[]` | `[]` | Data sources added on mount |
+| `beforeId` | `string` | - | Insert managed layers before this map layer |
+| `onChange` | `(date: Date) => void` | - | Fired on every date change |
 
 #### Methods
 
 | Method | Description |
 |--------|-------------|
-| `play()` | Start playback |
-| `pause()` | Pause playback |
-| `togglePlayback()` | Toggle play/pause state |
-| `next()` | Move to next label |
-| `prev()` | Move to previous label |
-| `goTo(index)` | Navigate to specific index |
-| `setSpeed(ms)` | Set playback speed |
-| `setLoop(enabled)` | Set loop state |
-| `setLabels(labels, resetIndex?)` | Update labels |
-| `getCurrentIndex()` | Get current index |
-| `getCurrentLabel()` | Get current label |
-| `getLabels()` | Get all labels |
-| `getState()` | Get full state object |
-| `toggle()` | Toggle panel collapsed state |
-| `expand()` | Expand panel |
-| `collapse()` | Collapse panel |
-| `on(event, handler)` | Register event listener |
-| `off(event, handler)` | Remove event listener |
+| `play()` / `pause()` / `togglePlayback()` | Playback control |
+| `next()` / `prev()` | Step one interval (honoring loop) |
+| `goTo(date)` | Navigate to a date (snapped to a step) |
+| `setSpeed(ms)` / `setLoop(enabled)` | Playback settings |
+| `setRange(start, end, interval?, granularity?)` | Update the range |
+| `setGranularity(granularity)` | Change granularity |
+| `collapse()` / `expand()` / `toggle()` | Hide / show the dock |
+| `addSource(spec)` | Add a managed source; returns its id |
+| `removeSource(id)` | Remove a managed source |
+| `setSourceOpacity(id, opacity)` | Set a layer's opacity |
+| `setSourceProperty(id, patch)` | Patch a source (e.g. COG colormap/rescale) |
+| `getSources()` | Current source specs |
+| `getState()` / `getCurrentDate()` | Read state |
+| `getConfig()` / `setConfig(config)` | Serialize / restore full config |
+| `on(event, handler)` / `off(event, handler)` | Events |
 
 #### Events
 
-| Event | Description |
-|-------|-------------|
-| `change` | Fired when the current index changes |
-| `play` | Fired when playback starts |
-| `pause` | Fired when playback pauses |
-| `collapse` | Fired when panel collapses |
-| `expand` | Fired when panel expands |
-| `statechange` | Fired on any state change |
+`change`, `play`, `pause`, `granularitychange`, `rangechange`, `sourceadd`,
+`sourceremove`, `collapse`, `expand`, `statechange`. Handlers receive
+`{ type, state }`.
 
 ### TiTiler Utilities
 
-#### buildTiTilerTileUrl(options)
-
-Builds a TiTiler XYZ tile URL for MapLibre raster sources.
-
-```typescript
-const tileUrl = buildTiTilerTileUrl({
-  url: 'https://example.com/my-cog.tif',
-  endpoint: 'https://titiler.d2s.org',  // optional, default
-  colormap: 'viridis',              // optional, default
-  rescale: [-10, 10],               // optional
-  bidx: [1],                        // optional, band indexes
-});
-```
-
-#### getTiTilerBounds(url, endpoint?)
-
-Fetches the bounds of a COG file.
+`buildTiTilerTileUrl(options)`, `getTiTilerBounds(url, endpoint?)`,
+`getTiTilerInfo(url, endpoint?)`, and `getTiTilerStatistics(url, endpoint?)` are
+still exported for advanced use (the COG adapter uses them internally).
 
 ```typescript
 const bounds = await getTiTilerBounds('https://example.com/my-cog.tif');
 map.fitBounds(bounds);
 ```
 
-#### getTiTilerInfo(url, endpoint?)
-
-Fetches metadata about a COG file.
-
-#### getTiTilerStatistics(url, endpoint?)
-
-Fetches statistics (min, max, mean, std) for each band.
-
 ## Theming
 
-The control adapts to the system color scheme automatically. It ships with a
-light palette by default and switches to a dark palette via the
-`@media (prefers-color-scheme: dark)` query, matching the user's OS or browser
-preference. No configuration is required.
-
-All colors are exposed as CSS custom properties, so you can override the palette
-(or pin a specific theme) by redefining the variables on the control elements:
+The dock follows the system color scheme by default (light palette + a
+`@media (prefers-color-scheme: dark)` dark palette). Set `theme: 'light'` or
+`theme: 'dark'` to pin a palette. All colors are CSS custom properties on the
+`.maplibregl-time-slider-dock` root, so you can override them:
 
 ```css
-/* Override the accent color in both themes */
-.time-slider-control,
-.time-slider-control-panel {
+.maplibregl-time-slider-dock {
   --ts-accent: #e0533d;
   --ts-accent-hover: #c8472f;
-  --ts-accent-active: #b03d28;
-}
-
-/* Force the dark palette regardless of the system setting */
-.time-slider-control,
-.time-slider-control-panel {
-  --ts-bg: #2b2b2b;
-  --ts-fg: #e6e6e6;
-  --ts-border: #444;
   /* ...see src/lib/styles/time-slider-control.css for the full list */
 }
 ```
+
+## Migrating from 0.x
+
+| 0.x | 1.0 |
+|-----|-----|
+| `labels: string[]` | `startDate` + `endDate` + `granularity` (+ `interval`) |
+| `onChange(index, label)` | `onChange(date: Date)` |
+| You wired sources/layers in `onChange` | Declare `sources: [...]`; the plugin manages layers |
+| `onAddLayer` / "Add Layer" button | Built-in "Add data" GUI + `addSource()` |
+| Corner panel, `collapsed` / `panelWidth` / `position` | Full-width bottom dock |
+| `initialIndex` / `goTo(index)` / `getCurrentIndex()` | `initialDate` / `goTo(date)` / `getCurrentDate()` |
+| `useTimeSliderState()` | `useTimeSlider(map, options)` |
 
 ## Development
 

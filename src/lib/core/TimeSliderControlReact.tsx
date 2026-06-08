@@ -3,36 +3,26 @@ import { TimeSliderControl } from './TimeSliderControl';
 import type { TimeSliderControlReactProps } from './types';
 
 /**
- * React wrapper component for TimeSliderControl.
- *
- * This component manages the lifecycle of a TimeSliderControl instance,
- * adding it to the map on mount and removing it on unmount.
+ * React wrapper for {@link TimeSliderControl}. Creates the control on mount,
+ * adds it to the map, and removes it on unmount. Changes to `speed`, `loop`,
+ * `granularity`, and `sources` are reconciled imperatively.
  *
  * @example
  * ```tsx
  * import { TimeSliderControlReact } from 'maplibre-gl-time-slider/react';
  *
- * function MyMap() {
- *   const [map, setMap] = useState<Map | null>(null);
- *
- *   return (
- *     <>
- *       <div ref={mapContainer} />
- *       {map && (
- *         <TimeSliderControlReact
- *           map={map}
- *           title="Time Slider"
- *           labels={['2024-01', '2024-02', '2024-03']}
- *           onChange={(index, label) => console.log(label)}
- *         />
- *       )}
- *     </>
- *   );
- * }
+ * <TimeSliderControlReact
+ *   map={map}
+ *   startDate="2024-04-18"
+ *   endDate="2024-04-28"
+ *   granularity="day"
+ *   sources={[{ type: 'cog', id: 'chla', url: 'https://.../{date:YYYY-MM-DD}.tif' }]}
+ *   onChange={(date) => console.log(date)}
+ * />
  * ```
  *
- * @param props - Component props including map instance and control options
- * @returns null - This component renders nothing directly
+ * @param props - Map instance, control options, and callbacks
+ * @returns null (renders nothing directly)
  */
 export function TimeSliderControlReact({
   map,
@@ -43,80 +33,64 @@ export function TimeSliderControlReact({
 }: TimeSliderControlReactProps): null {
   const controlRef = useRef<TimeSliderControl | null>(null);
 
+  // Keep the latest callbacks in a ref so handlers registered once (in the
+  // create effect) always call the current props, not the first render's.
+  const callbacks = useRef({ onStateChange, onPlay, onPause, onChange: options.onChange });
+  callbacks.current = { onStateChange, onPlay, onPause, onChange: options.onChange };
+
+  // Create / destroy the control with the map.
   useEffect(() => {
     if (!map) return;
 
-    // Create the control instance
-    const control = new TimeSliderControl(options);
+    const control = new TimeSliderControl({
+      ...options,
+      onChange: (date) => callbacks.current.onChange?.(date),
+    });
     controlRef.current = control;
 
-    // Register state change handler if provided
-    if (onStateChange) {
-      control.on('statechange', (event) => {
-        onStateChange(event.state);
-      });
-    }
+    control.on('statechange', (e) => callbacks.current.onStateChange?.(e.state));
+    control.on('play', () => callbacks.current.onPlay?.());
+    control.on('pause', () => callbacks.current.onPause?.());
 
-    // Register play handler if provided
-    if (onPlay) {
-      control.on('play', () => {
-        onPlay();
-      });
-    }
+    map.addControl(control, 'bottom-left');
 
-    // Register pause handler if provided
-    if (onPause) {
-      control.on('pause', () => {
-        onPause();
-      });
-    }
-
-    // Add control to map
-    map.addControl(control, options.position || 'top-right');
-
-    // Cleanup on unmount
     return () => {
       if (map.hasControl(control)) {
         map.removeControl(control);
       }
       controlRef.current = null;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [map]);
 
-  // Update options when they change
+  // Reconcile playback / granularity props.
   useEffect(() => {
-    if (controlRef.current) {
-      // Handle collapsed state changes
-      const currentState = controlRef.current.getState();
-      if (options.collapsed !== undefined && options.collapsed !== currentState.collapsed) {
-        if (options.collapsed) {
-          controlRef.current.collapse();
-        } else {
-          controlRef.current.expand();
-        }
-      }
-
-      // Handle speed changes
-      if (options.speed !== undefined && options.speed !== currentState.speed) {
-        controlRef.current.setSpeed(options.speed);
-      }
-
-      // Handle loop changes
-      if (options.loop !== undefined && options.loop !== currentState.loop) {
-        controlRef.current.setLoop(options.loop);
-      }
+    const control = controlRef.current;
+    if (!control) return;
+    const state = control.getState();
+    if (options.speed != null && options.speed !== state.speed) control.setSpeed(options.speed);
+    if (options.loop != null && options.loop !== state.loop) control.setLoop(options.loop);
+    if (options.granularity && options.granularity !== state.granularity) {
+      control.setGranularity(options.granularity);
     }
-  }, [options.collapsed, options.speed, options.loop]);
+  }, [options.speed, options.loop, options.granularity]);
 
-  // Update labels when they change
+  // Reconcile sources by id (add new, remove missing). Sources need stable ids.
   useEffect(() => {
-    if (controlRef.current && options.labels) {
-      const currentLabels = controlRef.current.getLabels();
-      if (JSON.stringify(currentLabels) !== JSON.stringify(options.labels)) {
-        controlRef.current.setLabels(options.labels, false);
-      }
+    const control = controlRef.current;
+    if (!control) return;
+    const current = control.getSources();
+    const next = options.sources ?? [];
+    const nextIds = new Set(next.map((s) => s.id).filter(Boolean));
+    const currentIds = new Set(current.map((s) => s.id).filter(Boolean));
+
+    for (const spec of current) {
+      if (spec.id && !nextIds.has(spec.id)) control.removeSource(spec.id);
     }
-  }, [options.labels]);
+    for (const spec of next) {
+      if (spec.id && !currentIds.has(spec.id)) control.addSource(spec);
+    }
+  }, [options.sources]);
 
   return null;
 }

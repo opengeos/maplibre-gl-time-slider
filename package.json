@@ -1,7 +1,7 @@
 {
   "name": "maplibre-gl-time-slider",
-  "version": "0.4.0",
-  "description": "A MapLibre GL JS plugin for visualizing time series vector and raster data with an interactive time slider control",
+  "version": "1.0.0",
+  "description": "A MapLibre GL JS plugin for visualizing time series raster and vector data with a NASA-Worldview-style bottom-docked timeline",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
@@ -89,6 +89,7 @@
     }
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.0",
     "@types/node": "^25.9.0",
@@ -108,8 +109,5 @@
     "vite": "^8.0.0",
     "vite-plugin-dts": "^5.0.0",
     "vitest": "^4.1.0"
-  },
-  "dependencies": {
-    "maplibre-gl-layer-control": "^0.14.0"
   }
 }

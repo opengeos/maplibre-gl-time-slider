@@ -1,14 +1,57 @@
 // Import styles
 import './lib/styles/time-slider-control.css';
 
-// Main entry point - Core exports
+// Core control
 export { TimeSliderControl } from './lib/core/TimeSliderControl';
+
+// Adapters (for custom integrations)
+export { createAdapter } from './lib/adapters/registry';
+export { buildTimeFilter } from './lib/adapters/GeoJsonAdapter';
+export type { SourceAdapter, AdapterContext } from './lib/adapters/types';
+
+// Time utilities
+export {
+  addUnits,
+  floorToGranularity,
+  granularityCode,
+  toDate,
+  GRANULARITIES,
+} from './lib/time/granularity';
+export {
+  generateSteps,
+  snapToStep,
+  nextStep,
+  prevStep,
+  dateToFraction,
+  fractionToDate,
+  unitsBetween,
+} from './lib/time/timeline';
+export { generateTicks } from './lib/time/ticks';
+export type { Tick } from './lib/time/ticks';
+
+// Templating
+export { formatDate } from './lib/template/dateFormat';
+export { expandTokens, resolveUrl } from './lib/template/urlTemplate';
 
 // Type exports
 export type {
+  Granularity,
+  UrlInput,
+  UrlResolver,
+  SourceSpec,
+  ResolvedSourceSpec,
+  CogSourceSpec,
+  XyzSourceSpec,
+  WmsSourceSpec,
+  GeoJsonSourceSpec,
+  CustomSourceSpec,
+  GeoJsonTimeWindow,
+  GeoJsonPaint,
   TimeSliderOptions,
   TimeSliderState,
+  TimeSliderConfig,
   TimeSliderEvent,
+  TimeSliderEventData,
   TimeSliderEventHandler,
 } from './lib/core/types';
 

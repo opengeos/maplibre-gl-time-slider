@@ -36,3 +36,7 @@ dist-examples/
 .env.local
 .env.*.local
 .vite/
+
+# Brainstorming companion scratch files
+.superpowers/
+.playwright-cli/

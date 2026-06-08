@@ -1,339 +1,542 @@
 /**
- * MapLibre GL Time Slider Control Styles
+ * MapLibre GL Time Slider — bottom-docked timeline styles.
  *
- * Colors are driven by CSS custom properties so the control adapts to the
- * system theme. The light palette is the default; the dark palette is applied
- * automatically via `@media (prefers-color-scheme: dark)`.
- *
- * The panel is appended to the map container (not inside .time-slider-control),
- * so the variables are defined on both root elements.
+ * Colors are driven by CSS custom properties. The light palette is the default;
+ * the dark palette applies automatically via `@media (prefers-color-scheme:
+ * dark)`. An explicit `theme: 'light' | 'dark'` adds a `.ts-theme-light` /
+ * `.ts-theme-dark` class on the dock root that redeclares the variables, so it
+ * overrides the media query.
  */
 
-/* Light theme palette (default) */
-.time-slider-control,
-.time-slider-control-panel {
-  --ts-bg: #fff;
-  --ts-shadow: rgba(0, 0, 0, 0.1);
-  --ts-fg: #333;
+/* Light palette (default) */
+.maplibregl-time-slider-dock,
+.maplibregl-time-slider-dock.ts-theme-light {
+  --ts-bg: #ffffff;
+  --ts-shadow: rgba(0, 0, 0, 0.18);
+  --ts-fg: #333333;
   --ts-fg-strong: #1f2a37;
-  --ts-fg-muted: #555;
-  --ts-fg-subtle: #999;
+  --ts-fg-muted: #5a5a5a;
+  --ts-fg-subtle: #999999;
   --ts-border: #e0e0e0;
-  --ts-hover-overlay: rgba(0, 0, 0, 0.05);
+  --ts-tick: #707070;
+  --ts-marker: #4a90d9;
   --ts-display-bg: #f5f5f5;
-  --ts-track: #e0e0e0;
-  --ts-thumb-border: #fff;
-  --ts-thumb-shadow: rgba(0, 0, 0, 0.3);
-  --ts-btn-bg: #e8e8e8;
-  --ts-btn-border: #ccc;
-  --ts-btn-hover-bg: #ddd;
-  --ts-btn-hover-border: #bbb;
-  --ts-btn-active-bg: #ccc;
-  --ts-input-bg: #fff;
-  --ts-input-border: #ddd;
+  --ts-btn-bg: #efefef;
+  --ts-btn-border: #cccccc;
+  --ts-btn-hover-bg: #e2e2e2;
+  --ts-btn-hover-border: #bbbbbb;
+  --ts-input-bg: #ffffff;
+  --ts-input-border: #d8d8d8;
   --ts-accent: #4a90d9;
   --ts-accent-hover: #3a7bc8;
-  --ts-accent-active: #2a6bb8;
-  --ts-accent-ring: rgba(74, 144, 217, 0.2);
+  --ts-accent-ring: rgba(74, 144, 217, 0.25);
 }
 
-/* Dark theme palette (follows the system preference) */
+/* Dark palette (follows the system preference) */
 @media (prefers-color-scheme: dark) {
-  .time-slider-control,
-  .time-slider-control-panel {
-    --ts-bg: #2b2b2b;
-    --ts-shadow: rgba(0, 0, 0, 0.5);
+  .maplibregl-time-slider-dock {
+    --ts-bg: #1f1f1f;
+    --ts-shadow: rgba(0, 0, 0, 0.6);
     --ts-fg: #e6e6e6;
-    --ts-fg-strong: #f0f0f0;
-    --ts-fg-muted: #b5b5b5;
-    --ts-fg-subtle: #888;
-    --ts-border: #444;
-    --ts-hover-overlay: rgba(255, 255, 255, 0.08);
-    --ts-display-bg: #383838;
-    --ts-track: #555;
-    --ts-thumb-border: #2b2b2b;
-    --ts-thumb-shadow: rgba(0, 0, 0, 0.6);
-    --ts-btn-bg: #3a3a3a;
-    --ts-btn-border: #555;
-    --ts-btn-hover-bg: #4a4a4a;
-    --ts-btn-hover-border: #666;
-    --ts-btn-active-bg: #555;
-    --ts-input-bg: #383838;
-    --ts-input-border: #555;
+    --ts-fg-strong: #f4f4f4;
+    --ts-fg-muted: #b0b0b0;
+    --ts-fg-subtle: #888888;
+    --ts-border: #3a3a3a;
+    --ts-tick: #8f8f8f;
+    --ts-marker: #5a9fe0;
+    --ts-display-bg: #2c2c2c;
+    --ts-btn-bg: #353535;
+    --ts-btn-border: #555555;
+    --ts-btn-hover-bg: #454545;
+    --ts-btn-hover-border: #666666;
+    --ts-input-bg: #2c2c2c;
+    --ts-input-border: #555555;
     --ts-accent: #5a9fe0;
     --ts-accent-hover: #4a90d9;
-    --ts-accent-active: #3a7bc8;
-    --ts-accent-ring: rgba(90, 159, 224, 0.3);
+    --ts-accent-ring: rgba(90, 159, 224, 0.35);
   }
 }
 
-/* Container - matches maplibregl-ctrl styling.
- * The selector is intentionally scoped to .maplibregl-ctrl-group so the themed
- * background reliably wins over MapLibre's own `.maplibregl-ctrl-group{background:#fff}`
- * regardless of stylesheet import order (otherwise the dark toggle would stay
- * white and the light icon would have no contrast). */
-.maplibregl-ctrl-group.time-slider-control {
-  background: var(--ts-bg);
-  border-radius: 4px;
-  box-shadow: 0 0 0 2px var(--ts-shadow);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+/* Explicit dark override (wins over the media query) */
+.maplibregl-time-slider-dock.ts-theme-dark {
+  --ts-bg: #1f1f1f;
+  --ts-shadow: rgba(0, 0, 0, 0.6);
+  --ts-fg: #e6e6e6;
+  --ts-fg-strong: #f4f4f4;
+  --ts-fg-muted: #b0b0b0;
+  --ts-fg-subtle: #888888;
+  --ts-border: #3a3a3a;
+  --ts-tick: #555555;
+  --ts-marker: #5a9fe0;
+  --ts-display-bg: #2c2c2c;
+  --ts-btn-bg: #353535;
+  --ts-btn-border: #555555;
+  --ts-btn-hover-bg: #454545;
+  --ts-btn-hover-border: #666666;
+  --ts-input-bg: #2c2c2c;
+  --ts-input-border: #555555;
+  --ts-accent: #5a9fe0;
+  --ts-accent-hover: #4a90d9;
+  --ts-accent-ring: rgba(90, 159, 224, 0.35);
 }
 
-/* Toggle button - 29x29 to match navigation control */
-.time-slider-control-toggle {
-  background: none;
-  border: none;
-  padding: 0;
+/* Corner toggle button (clock icon) that collapses/expands the dock. */
+.maplibregl-time-slider-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 29px;
   height: 29px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  padding: 0;
+  border: none;
+  background: none;
   cursor: pointer;
-  outline: none;
-  color: var(--ts-fg-strong);
+  color: #333;
 }
 
-/* Scoped to beat MapLibre's `.maplibregl-ctrl button:not(:disabled):hover`
- * so the hover overlay matches the active theme. */
-.maplibregl-ctrl-group.time-slider-control .time-slider-control-toggle:hover {
-  background-color: var(--ts-hover-overlay);
-}
-
-.time-slider-control-icon {
-  width: 100%;
-  height: 100%;
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 0;
-}
-
-.time-slider-control-icon svg {
-  width: 22px;
-  height: 22px;
-  display: block;
-  stroke: currentColor;
-  fill: none;
-}
-
-/* Panel - positioned dynamically by JavaScript for floating behavior */
-.time-slider-control-panel {
-  position: absolute;
-  /* Position is set dynamically by _updatePanelPosition() */
-  background: var(--ts-bg);
-  border-radius: 4px;
-  box-shadow: 0 0 0 2px var(--ts-shadow);
-  min-width: 280px;
-  max-width: 420px;
-  z-index: 1000;
-  padding: 8px;
-  font-size: 12px;
-  line-height: 1.4;
-  display: none;
-}
-
-.time-slider-control-panel.expanded {
-  display: block;
-}
-
-/* Panel header */
-.time-slider-control-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  font-weight: 600;
-  color: var(--ts-fg);
-  padding: 4px 0 8px 0;
-  border-bottom: 1px solid var(--ts-border);
-  margin-bottom: 10px;
-}
-
-.time-slider-control-title {
-  flex: 1 1 auto;
-  font-size: 13px;
-}
-
-.time-slider-control-close {
+.maplibregl-time-slider-toggle-btn svg {
   width: 20px;
   height: 20px;
-  border: none;
-  background: transparent;
-  color: var(--ts-fg-subtle);
-  font-size: 18px;
-  line-height: 1;
-  cursor: pointer;
-  padding: 0;
-  transition: color 0.2s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
-.time-slider-control-close:hover {
-  color: var(--ts-fg);
-}
-
-/* Content */
-.time-slider-control-content {
+/* Reserve-space layout wrapper: a flex column holding the map then the dock.
+ * (The control also sets these inline; declared here so the .ts-docked flex
+ * sizing works even if inline styles are stripped.) */
+.maplibregl-time-slider-layout {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  box-sizing: border-box;
+  overflow: hidden;
+  max-width: 100%;
 }
 
-/* Label display */
-.time-slider-label-display {
-  text-align: center;
-  font-size: 14px;
-  font-weight: 600;
+/* Dock shell. Overlay by default (fallback); reserve-space layout adds
+ * `.ts-docked` to place it in normal flow below the map. */
+.maplibregl-time-slider-dock {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  align-items: stretch;
+  height: 66px;
+  background: var(--ts-bg);
   color: var(--ts-fg);
-  padding: 6px 0;
-  background: var(--ts-display-bg);
-  border-radius: 4px;
-}
-
-/* Range slider */
-.time-slider-range {
-  width: 100%;
-  height: 6px;
-  -webkit-appearance: none;
-  appearance: none;
-  background: var(--ts-track);
-  border-radius: 3px;
-  outline: none;
-  cursor: pointer;
-}
-
-.time-slider-range::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 16px;
-  height: 16px;
-  background: var(--ts-accent);
-  border-radius: 50%;
-  cursor: pointer;
-  border: 2px solid var(--ts-thumb-border);
-  box-shadow: 0 1px 3px var(--ts-thumb-shadow);
-  transition: background 0.15s ease;
-}
-
-.time-slider-range::-webkit-slider-thumb:hover {
-  background: var(--ts-accent-hover);
-}
-
-.time-slider-range::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
-  background: var(--ts-accent);
-  border-radius: 50%;
-  cursor: pointer;
-  border: 2px solid var(--ts-thumb-border);
-  box-shadow: 0 1px 3px var(--ts-thumb-shadow);
-  transition: background 0.15s ease;
-}
-
-.time-slider-range::-moz-range-thumb:hover {
-  background: var(--ts-accent-hover);
-}
-
-/* Control buttons */
-.time-slider-controls {
-  display: flex;
-  gap: 6px;
-}
-
-.time-slider-control-content .time-slider-btn {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 6px 10px;
+  border-top: 1px solid var(--ts-border);
+  box-shadow: 0 -1px 6px var(--ts-shadow);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 12px;
-  font-weight: 500;
-  color: var(--ts-fg);
-  background-color: var(--ts-btn-bg);
-  border: 1px solid var(--ts-btn-border);
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
   box-sizing: border-box;
 }
 
-.time-slider-control-content .time-slider-btn:hover {
-  background-color: var(--ts-btn-hover-bg);
-  border-color: var(--ts-btn-hover-border);
+.maplibregl-time-slider-dock *,
+.maplibregl-time-slider-dock *::before,
+.maplibregl-time-slider-dock *::after {
+  box-sizing: border-box;
 }
 
-.time-slider-control-content .time-slider-btn:active {
-  background-color: var(--ts-btn-active-bg);
-}
-
-.time-slider-btn-icon {
-  font-size: 10px;
-  line-height: 1;
-}
-
-/* Add Layer button - distinctive styling */
-.time-slider-add-layer {
+/* Reserve-space: the dock sits in normal flow below the map (not overlaid). */
+.maplibregl-time-slider-dock.ts-docked {
+  position: relative;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  flex: 0 0 auto;
   width: 100%;
-  background-color: var(--ts-accent) !important;
-  color: #fff !important;
-  border-color: var(--ts-accent-hover) !important;
 }
 
-.time-slider-add-layer:hover {
-  background-color: var(--ts-accent-hover) !important;
-  border-color: var(--ts-accent-active) !important;
+/* Collapsed: the dock is hidden; only the corner toggle remains. */
+.maplibregl-time-slider-dock.ts-collapsed {
+  display: none;
 }
 
-.time-slider-add-layer:active {
-  background-color: var(--ts-accent-active) !important;
-}
-
-/* Settings row */
-.time-slider-settings {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding-top: 8px;
-  border-top: 1px solid var(--ts-border);
-}
-
-.time-slider-setting {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  color: var(--ts-fg-muted);
-}
-
-.time-slider-speed-input {
-  width: 60px;
-  padding: 4px 6px;
-  font-size: 12px;
+/* Generic dock inputs (range excluded — it has its own look) */
+.maplibregl-time-slider-dock input:not([type='range']),
+.maplibregl-time-slider-dock select {
   color: var(--ts-fg);
   background: var(--ts-input-bg);
   border: 1px solid var(--ts-input-border);
   border-radius: 3px;
-  text-align: center;
+  padding: 4px 6px;
+  font-size: 12px;
   outline: none;
 }
 
-.time-slider-speed-input:focus {
+.maplibregl-time-slider-dock input:not([type='range']):focus,
+.maplibregl-time-slider-dock select:focus {
   border-color: var(--ts-accent);
   box-shadow: 0 0 0 2px var(--ts-accent-ring);
 }
 
-.time-slider-loop-label {
+/* Shared button */
+.maplibregl-time-slider-dock .time-slider-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 5px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--ts-fg);
+  background: var(--ts-btn-bg);
+  border: 1px solid var(--ts-btn-border);
+  border-radius: 4px;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.maplibregl-time-slider-dock .time-slider-btn:hover {
+  background: var(--ts-btn-hover-bg);
+  border-color: var(--ts-btn-hover-border);
+}
+
+.maplibregl-time-slider-dock .time-slider-btn.ts-active {
+  background: var(--ts-accent);
+  border-color: var(--ts-accent-hover);
+  color: #fff;
+}
+
+/* ----- Left cluster: date + transport ----- */
+.ts-left {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-right: 1px solid var(--ts-border);
+}
+
+.ts-playback {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ts-playback .time-slider-btn {
+  width: 28px;
+  height: 24px;
+  padding: 0;
+  font-size: 12px;
+}
+
+.ts-speed {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 4px;
+  font-size: 11px;
+  color: var(--ts-fg-muted);
+}
+
+.ts-speed-input {
+  width: 58px;
+  text-align: center;
+}
+
+/* ----- Center: scrubbable axis ----- */
+.ts-axis {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+  padding: 8px 10px 4px;
+}
+
+.ts-axis-track {
+  position: relative;
+  flex: 1 1 auto;
   cursor: pointer;
 }
 
-.time-slider-loop-checkbox {
-  margin: 0;
+.ts-axis-track::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 20px;
+  height: 1px;
+  background: var(--ts-border);
+}
+
+.ts-ticks {
+  position: absolute;
+  inset: 0;
+}
+
+.ts-tick {
+  position: absolute;
+  bottom: 20px;
+  width: 1px;
+  height: 14px;
+  background: var(--ts-tick);
+  transform: translateX(-0.5px);
+}
+
+.ts-tick-major {
+  width: 2px;
+  height: 20px;
+  background: var(--ts-fg-strong);
+  transform: translateX(-1px);
+}
+
+.ts-tick-label {
+  position: absolute;
+  /* Anchor to the tick's baseline edge (constant) so the label sits below the
+   * ticks regardless of tick height, instead of being overlapped by tall ticks. */
+  bottom: -17px;
+  left: 0;
+  transform: translateX(-50%);
+  font-size: 10px;
+  color: var(--ts-fg-muted);
+  white-space: nowrap;
+}
+
+.ts-marker {
+  position: absolute;
+  top: 0;
+  bottom: 18px;
+  width: 2px;
+  background: var(--ts-marker);
+  transform: translateX(-1px);
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Downward triangle at the top of the marker (the pointer). */
+.ts-marker-knob {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 7px solid var(--ts-marker);
+}
+
+/* Current-date label, rendered beneath the pointer and riding with it. */
+.ts-marker-label {
+  position: absolute;
+  top: 9px;
+  left: 0;
+  transform: translateX(-50%);
+  padding: 1px 6px;
+  background: var(--ts-marker);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  line-height: 1.4;
+  white-space: nowrap;
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+/* ----- Right cluster: pills + add-data ----- */
+.ts-right {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-left: 1px solid var(--ts-border);
+}
+
+.ts-pills {
+  display: flex;
+  gap: 3px;
+}
+
+.ts-pill {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 12px;
+  border: 1px solid var(--ts-btn-border);
+  background: var(--ts-btn-bg);
+  color: var(--ts-fg);
+  font-size: 11px;
+  font-weight: 600;
   cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.ts-pill:hover {
+  background: var(--ts-btn-hover-bg);
+  border-color: var(--ts-btn-hover-border);
+}
+
+.ts-pill.ts-active {
+  background: var(--ts-accent);
+  border-color: var(--ts-accent-hover);
+  color: #fff;
+}
+
+.ts-add-data {
+  white-space: nowrap;
+}
+
+/* Hide-timeline button. */
+.ts-collapse-btn {
+  width: 28px;
+  height: 24px;
+  padding: 0;
+  font-size: 11px;
+}
+
+/* ----- Layers popover ----- */
+/* Static so the popover anchors to .ts-right (full dock height) and floats
+ * clearly above the whole dock rather than the small button. */
+.ts-layers {
+  position: static;
+}
+
+.ts-popover {
+  position: absolute;
+  right: 12px;
+  bottom: calc(100% + 8px);
+  width: 300px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 10px;
+  display: none;
+  background: var(--ts-bg);
+  border: 1px solid var(--ts-border);
+  border-radius: 6px;
+  box-shadow: 0 2px 14px var(--ts-shadow);
+  z-index: 5;
+}
+
+.ts-layers.ts-open .ts-popover {
+  display: block;
+}
+
+.ts-layer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.ts-layer-empty {
+  padding: 10px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--ts-fg-subtle);
+}
+
+.ts-layer-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--ts-border);
+  border-radius: 4px;
+}
+
+.ts-layer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ts-layer-name {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--ts-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ts-layer-remove {
+  border: none;
+  background: transparent;
+  color: var(--ts-fg-subtle);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.ts-layer-remove:hover {
+  color: var(--ts-fg);
+}
+
+.ts-opacity {
+  width: 100%;
   accent-color: var(--ts-accent);
+  cursor: pointer;
+}
+
+.ts-cog-controls {
+  display: flex;
+  gap: 4px;
+}
+
+.ts-cog-controls input {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+/* ----- Add-data form ----- */
+.ts-add-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--ts-border);
+}
+
+.ts-form-title {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--ts-fg);
+}
+
+.ts-form-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ts-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--ts-fg-muted);
+}
+
+.ts-add-submit {
+  align-self: flex-start;
+}
+
+/* ----- Responsive ----- */
+@media (max-width: 640px) {
+  .maplibregl-time-slider-dock {
+    height: auto;
+    flex-wrap: wrap;
+  }
+
+  .ts-axis {
+    order: 3;
+    flex-basis: 100%;
+    padding-bottom: 8px;
+  }
+
+  .ts-date {
+    font-size: 13px;
+  }
+
+  .ts-popover {
+    width: 84vw;
+  }
 }
