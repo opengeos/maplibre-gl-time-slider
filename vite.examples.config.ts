@@ -17,6 +17,7 @@ export default defineConfig({
         vector: resolve(__dirname, 'examples/vector/index.html'),
         pace: resolve(__dirname, 'examples/pace/index.html'),
         naip: resolve(__dirname, 'examples/naip/index.html'),
+        worldview: resolve(__dirname, 'examples/worldview/index.html'),
       },
     },
   },
