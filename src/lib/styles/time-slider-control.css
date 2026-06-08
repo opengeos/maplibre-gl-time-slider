@@ -203,9 +203,9 @@
 /* ----- Left cluster: date + transport ----- */
 .ts-left {
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 5px;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
   padding: 6px 12px;
   border-right: 1px solid var(--ts-border);
 }
@@ -524,19 +524,44 @@
   .maplibregl-time-slider-dock {
     height: auto;
     flex-wrap: wrap;
+    align-items: center;
+    row-gap: 2px;
+    padding-bottom: 4px;
   }
 
+  /* Axis gets its own full-width row on top. Its children are absolutely
+   * positioned, so it needs an explicit min-height (room for the marker label,
+   * ticks, and tick labels) or the row collapses and the slider is cut off. */
   .ts-axis {
-    order: 3;
-    flex-basis: 100%;
-    padding-bottom: 8px;
+    order: -1;
+    flex: 1 1 100%;
+    min-height: 56px;
+    padding: 8px 12px 4px;
   }
 
-  .ts-date {
-    font-size: 13px;
+  .ts-left {
+    flex: 1 1 auto;
+    border-right: none;
+    padding: 2px 8px;
+  }
+
+  .ts-right {
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    border-left: none;
+    padding: 2px 8px;
+  }
+
+  /* Anchor the popover to the full-width dock (not the narrow, left-aligned
+   * right cluster) so it spans the screen instead of overflowing off-screen. */
+  .ts-right {
+    position: static;
   }
 
   .ts-popover {
-    width: 84vw;
+    left: 8px;
+    right: 8px;
+    width: auto;
+    max-height: 66vh;
   }
 }
