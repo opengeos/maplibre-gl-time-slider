@@ -1014,7 +1014,9 @@ function buildForm(
     // Zoom to the new layer's extent so it is immediately in view. COG specs
     // carry the TiTiler footprint fetched above; any source may also supply an
     // explicit `bounds`. Tiled sources (XYZ/WMS) have no intrinsic extent.
-    fitToSourceBounds(controller, spec);
+    // Fire-and-forget: keep the zoom non-fatal so a failed fit cannot surface
+    // as an unhandled rejection.
+    void fitToSourceBounds(controller, spec).catch(() => undefined);
     // The form fields are intentionally left as-is so the user can tweak and add
     // related layers without re-entering shared values.
     onAdded();
