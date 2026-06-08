@@ -613,6 +613,8 @@ function buildLayerRow(controller: DockController, spec: SourceSpec): HTMLElemen
   const header = document.createElement('div');
   header.className = 'ts-layer-head';
 
+  const layerLabel = spec.name ?? spec.id ?? spec.type;
+
   // Visibility toggle: hides/shows the layer without removing it.
   const visible = document.createElement('label');
   visible.className = 'ts-layer-visible';
@@ -620,7 +622,7 @@ function buildLayerRow(controller: DockController, spec: SourceSpec): HTMLElemen
   const visibleInput = document.createElement('input');
   visibleInput.type = 'checkbox';
   visibleInput.checked = spec.visible !== false;
-  visibleInput.setAttribute('aria-label', 'Toggle layer visibility');
+  visibleInput.setAttribute('aria-label', `Toggle visibility for ${layerLabel}`);
   visibleInput.addEventListener('change', () =>
     controller.setSourceProperty(spec.id!, {
       visible: visibleInput.checked,
@@ -630,7 +632,7 @@ function buildLayerRow(controller: DockController, spec: SourceSpec): HTMLElemen
 
   const name = document.createElement('span');
   name.className = 'ts-layer-name';
-  name.textContent = spec.name ?? spec.id ?? spec.type;
+  name.textContent = layerLabel;
   const remove = document.createElement('button');
   remove.type = 'button';
   remove.className = 'ts-layer-remove';

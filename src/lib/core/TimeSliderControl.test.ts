@@ -209,6 +209,7 @@ describe('TimeSliderControl sources', () => {
     expect(control.getState().isPlaying).toBe(false);
     control.addSource({ type: 'xyz', id: 'x', tiles: 'https://t/{z}/{x}/{y}.png' });
     expect(control.getState().isPlaying).toBe(true);
+    control.pause();
   });
 });
 

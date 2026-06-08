@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createAxis } from './axisRenderer';
 import { createLayersPopover } from './layersPopover';
 import type { DockController } from './types';
@@ -44,6 +44,12 @@ function baseController(overrides: Partial<DockController> = {}): DockController
     ...overrides,
   };
 }
+
+// Always remove any global stubs (e.g. a stubbed `fetch`) so a failed assertion
+// in one test cannot leak its stub into the next.
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe('axisRenderer', () => {
   it('renders ticks for the range', () => {
@@ -190,7 +196,6 @@ describe('layersPopover', () => {
     expect(spec.url).toContain('landsat_ts');
     expect(spec.bidx).toEqual([1, 2, 3]);
 
-    vi.unstubAllGlobals();
     popover.destroy();
   });
 
@@ -207,7 +212,6 @@ describe('layersPopover', () => {
     const spec = addSource.mock.calls[0][0] as { bounds?: number[] };
     expect(spec.bounds).toEqual(bounds);
 
-    vi.unstubAllGlobals();
     popover.destroy();
   });
 
@@ -351,7 +355,6 @@ describe('layersPopover', () => {
     await vi.waitFor(() => expect(addSource).toHaveBeenCalledTimes(1));
     expect((addSource.mock.calls[0][0] as { colormap?: string }).colormap).toBeUndefined();
 
-    vi.unstubAllGlobals();
     popover.destroy();
   });
 });

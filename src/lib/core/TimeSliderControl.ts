@@ -784,7 +784,12 @@ export class TimeSliderControl implements IControl, DockController {
       for (const spec of config.sources) {
         const adapter = createAdapter(spec, { map: this._map, beforeId: this._options.beforeId });
         this._adapters.push(adapter);
-        void Promise.resolve(adapter.add(s.currentDate)).catch(() => undefined);
+        void Promise.resolve(adapter.add(s.currentDate))
+          .then(() => {
+            // Mirror addSource: apply an initial hidden state once the layer exists.
+            if (spec.visible === false) adapter.setVisible(false);
+          })
+          .catch(() => undefined);
       }
     } else {
       this._options.sources = [...config.sources];
