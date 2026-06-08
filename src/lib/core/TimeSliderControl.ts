@@ -719,6 +719,9 @@ export class TimeSliderControl implements IControl, DockController {
     if (Object.keys(rest).length > 0 && adapter.setProperty) {
       void Promise.resolve(adapter.setProperty(rest as Partial<SourceSpec>)).catch(() => undefined);
     }
+    // Notify hosts so they can mirror live opacity/visibility/style changes
+    // (e.g. reflecting a layer's opacity into an external layers panel).
+    this._emit('statechange');
   }
 
   // ----- Config -----------------------------------------------------------

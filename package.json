@@ -1,6 +1,6 @@
 {
   "name": "maplibre-gl-time-slider",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A MapLibre GL JS plugin for visualizing time series raster and vector data with a NASA-Worldview-style bottom-docked timeline",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -39,7 +39,7 @@
   ],
   "scripts": {
     "dev": "vite",
-    "build": "tsc -p tsconfig.build.json && vite build",
+    "build": "vite build && tsc -p tsconfig.build.json",
     "build:examples": "vite build --config vite.examples.config.ts",
     "preview": "vite preview",
     "test": "vitest --run",

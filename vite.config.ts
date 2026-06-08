@@ -1,17 +1,13 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
-import dts from 'vite-plugin-dts';
 
+// Type declarations are emitted by `tsc -p tsconfig.build.json`
+// (emitDeclarationOnly) into `dist/types`, which is what package.json
+// `types`/`exports` advertise. The tsc step runs after `vite build` so its
+// output survives Vite's emptyOutDir clean.
 export default defineConfig({
-  plugins: [
-    react(),
-    dts({
-      include: ['src'],
-      outDir: 'dist/types',
-      rollupTypes: false,
-    }),
-  ],
+  plugins: [react()],
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
