@@ -49,6 +49,9 @@ function baseController(overrides: Partial<DockController> = {}): DockController
 // in one test cannot leak its stub into the next.
 afterEach(() => {
   vi.unstubAllGlobals();
+  // Restore prototype spies (e.g. getBoundingClientRect) so a mock from one
+  // test cannot leak into the next.
+  vi.restoreAllMocks();
 });
 
 describe('axisRenderer', () => {
