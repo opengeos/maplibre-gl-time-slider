@@ -304,7 +304,14 @@ export class TimeSliderControl implements IControl, DockController {
     wrapper.style.margin = cs.margin;
     wrapper.style.zIndex = cs.zIndex !== 'auto' ? cs.zIndex : '';
     wrapper.style.width = this._fillSize(container, 'width', cs.width);
-    wrapper.style.height = this._fillSize(container, 'height', cs.height);
+    const height = this._fillSize(container, 'height', cs.height);
+    wrapper.style.height = height;
+    if (height === '100vh') {
+      // Prefer the dynamic viewport height so the docked timeline is not hidden
+      // behind the mobile browser's URL bar. Ignored (keeps 100vh) where `dvh`
+      // is unsupported.
+      wrapper.style.height = '100dvh';
+    }
 
     parent.insertBefore(wrapper, container);
 
