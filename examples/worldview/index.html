@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MapLibre GL Time Slider - Raster Example</title>
+  <title>MapLibre GL Time Slider - NASA Worldview Example</title>
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css">
   <style>
     body {
@@ -14,10 +14,11 @@
     #map {
       width: 100vw;
       height: 100vh;
+      background: #0b1a2b;
     }
     .info-panel {
       position: absolute;
-      bottom: 20px;
+      top: 20px;
       left: 20px;
       background: rgba(255, 255, 255, 0.9);
       padding: 15px;
@@ -45,10 +46,10 @@
 <body>
   <div id="map"></div>
   <div class="info-panel">
-    <h3>NASA OPERA Displacement Data</h3>
-    <p>This example displays time series raster data using TiTiler. The data shows surface displacement measurements from the NASA OPERA project.</p>
-    <p>Use the <strong>Time Slider</strong> control to navigate through different dates.</p>
-    <p>Dataset: <code>OPERA-DISP-S1</code></p>
+    <h3>NASA Worldview Daily Imagery</h3>
+    <p>This example streams <strong>MODIS Terra Corrected Reflectance (True Color)</strong> imagery from NASA GIBS, the same time-enabled WMTS service that powers NASA Worldview.</p>
+    <p>Use the <strong>Time Slider</strong> to scrub through daily global imagery, or press play to animate the month.</p>
+    <p>Layer: <code>MODIS_Terra_CorrectedReflectance_TrueColor</code></p>
   </div>
   <script type="module" src="./main.ts"></script>
 </body>
