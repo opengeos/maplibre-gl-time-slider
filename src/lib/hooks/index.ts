@@ -1,1 +1,2 @@
-export { useTimeSliderState } from './useTimeSliderState';
+export { useTimeSlider } from './useTimeSlider';
+export type { UseTimeSliderResult } from './useTimeSlider';

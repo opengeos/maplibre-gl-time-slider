@@ -1,28 +1,19 @@
 import type { IControl, Map as MapLibreMap } from 'maplibre-gl';
 import type {
-  TimeSliderOptions,
-  TimeSliderState,
+  Granularity,
+  SourceSpec,
+  TimeSliderConfig,
   TimeSliderEvent,
   TimeSliderEventHandler,
+  TimeSliderOptions,
+  TimeSliderState,
 } from './types';
-
-/**
- * Default options for the TimeSliderControl.
- */
-const DEFAULT_OPTIONS: Required<Omit<TimeSliderOptions, 'onChange' | 'onAddLayer' | 'beforeId'>> & { onChange?: TimeSliderOptions['onChange']; onAddLayer?: TimeSliderOptions['onAddLayer']; beforeId?: string } = {
-  collapsed: true,
-  position: 'top-right',
-  title: 'Time Slider',
-  panelWidth: 300,
-  className: '',
-  labels: [],
-  initialIndex: 0,
-  speed: 1000,
-  loop: true,
-  onChange: undefined,
-  onAddLayer: undefined,
-  beforeId: undefined,
-};
+import { GRANULARITIES, toDate } from '../time/granularity';
+import { nextStep, prevStep, snapToStep } from '../time/timeline';
+import { createAdapter } from '../adapters/registry';
+import type { SourceAdapter } from '../adapters/types';
+import { createDockView } from '../ui/dock';
+import type { DockController, DockView } from '../ui/types';
 
 /**
  * Event handlers map type.
@@ -30,249 +21,403 @@ const DEFAULT_OPTIONS: Required<Omit<TimeSliderOptions, 'onChange' | 'onAddLayer
 type EventHandlersMap = globalThis.Map<TimeSliderEvent, Set<TimeSliderEventHandler>>;
 
 /**
- * A MapLibre GL control for visualizing time series data with an interactive slider.
- *
- * Supports both vector and raster data by providing a callback function that is
- * invoked when the slider position changes.
+ * Resolved internal options (defaults applied).
+ */
+interface ResolvedOptions {
+  granularities: Granularity[];
+  dateFormat?: string;
+  theme: 'auto' | 'light' | 'dark';
+  className?: string;
+  collapsible: boolean;
+  beforeId?: string;
+  sources: SourceSpec[];
+  onChange?: (date: Date) => void;
+}
+
+/**
+ * A MapLibre GL control presenting a NASA-Worldview-style bottom-docked
+ * timeline. Time is modeled as a continuous date range plus an interval; the
+ * control manages map sources/layers for built-in data types (COG, XYZ/WMTS,
+ * WMS-Time, GeoJSON) through adapters, and also exposes an `onChange` escape
+ * hatch for custom wiring.
  *
  * @example
  * ```typescript
- * const timeSlider = new TimeSliderControl({
- *   title: 'Time Slider',
- *   labels: ['2024-01', '2024-02', '2024-03'],
- *   speed: 1000,
- *   loop: true,
- *   onChange: (index, label) => {
- *     // Update map layers based on current time
- *     console.log(`Current: ${label} (index: ${index})`);
- *   }
+ * const slider = new TimeSliderControl({
+ *   startDate: '2024-04-18',
+ *   endDate: '2024-04-28',
+ *   granularity: 'day',
+ *   sources: [
+ *     { type: 'cog', url: 'https://.../{date:YYYY-MM-DD}.tif', colormap: 'jet', rescale: [0, 1] },
+ *   ],
  * });
- * map.addControl(timeSlider, 'top-right');
+ * map.addControl(slider, 'bottom-left');
  * ```
  */
-export class TimeSliderControl implements IControl {
+export class TimeSliderControl implements IControl, DockController {
   private _map?: MapLibreMap;
   private _mapContainer?: HTMLElement;
   private _container?: HTMLElement;
-  private _panel?: HTMLElement;
-  private _options: Required<Omit<TimeSliderOptions, 'onChange' | 'onAddLayer' | 'beforeId'>> & { onChange?: TimeSliderOptions['onChange']; onAddLayer?: TimeSliderOptions['onAddLayer']; beforeId?: string };
+  private _wrapper?: HTMLElement;
+  private _savedContainerCss?: string;
+  private _view?: DockView;
   private _state: TimeSliderState;
+  private _options: ResolvedOptions;
+  private _adapters: SourceAdapter[] = [];
   private _eventHandlers: EventHandlersMap = new globalThis.Map();
   private _playbackInterval?: ReturnType<typeof setInterval>;
 
-  // Panel positioning handlers
-  private _resizeHandler: (() => void) | null = null;
-  private _mapResizeHandler: (() => void) | null = null;
-  private _clickOutsideHandler: ((e: MouseEvent) => void) | null = null;
-
-  // DOM element references
-  private _labelDisplay?: HTMLElement;
-  private _slider?: HTMLInputElement;
-  private _playButton?: HTMLButtonElement;
-  private _speedInput?: HTMLInputElement;
-  private _loopCheckbox?: HTMLInputElement;
-  private _addLayerButton?: HTMLButtonElement;
-
   /**
-   * Creates a new TimeSliderControl instance.
+   * Creates a new TimeSliderControl.
    *
-   * @param options - Configuration options for the control
+   * @param options - Configuration options
    */
   constructor(options: TimeSliderOptions) {
-    this._options = { ...DEFAULT_OPTIONS, ...options };
+    const startDate = toDate(options.startDate);
+    const endDate = toDate(options.endDate);
+    const interval = Math.max(1, Math.floor(options.interval ?? 1));
+    const granularity = options.granularity ?? 'day';
+    const initial = options.initialDate ? toDate(options.initialDate) : startDate;
+
     this._state = {
-      collapsed: this._options.collapsed,
-      panelWidth: this._options.panelWidth,
-      currentIndex: this._options.initialIndex,
+      collapsed: options.collapsed ?? false,
+      startDate,
+      endDate,
+      interval,
+      granularity,
+      currentDate: snapToStep(initial, startDate, endDate, interval, granularity),
       isPlaying: false,
-      speed: this._options.speed,
-      loop: this._options.loop,
+      speed: Math.max(100, options.speed ?? 1000),
+      loop: options.loop ?? true,
+    };
+
+    this._options = {
+      granularities: options.granularities ?? GRANULARITIES,
+      dateFormat: options.dateFormat,
+      theme: options.theme ?? 'auto',
+      className: options.className,
+      collapsible: options.collapsible ?? true,
+      beforeId: options.beforeId,
+      sources: options.sources ?? [],
+      onChange: options.onChange,
     };
   }
 
+  // ----- IControl ---------------------------------------------------------
+
   /**
-   * Called when the control is added to the map.
-   * Implements the IControl interface.
+   * Adds the control: builds the dock, appends it to the map container, and
+   * creates the initial data layers.
    *
-   * @param map - The MapLibre GL map instance
-   * @returns The control's container element
+   * @param map - The MapLibre map
+   * @returns An (empty) anchor element required by the control stack
    */
   onAdd(map: MapLibreMap): HTMLElement {
     this._map = map;
     this._mapContainer = map.getContainer();
-    this._container = this._createContainer();
-    this._panel = this._createPanel();
 
-    // Append panel to map container for independent positioning (avoids overlap with other controls)
-    this._mapContainer.appendChild(this._panel);
-
-    // Setup event listeners for panel positioning and click-outside
-    this._setupEventListeners();
-
-    // Set initial panel state
-    if (!this._state.collapsed) {
-      this._panel.classList.add('expanded');
-      // Update position after control is added to DOM
-      requestAnimationFrame(() => {
-        this._updatePanelPosition();
-      });
+    // The control-stack element is a corner toggle button (clock icon) that
+    // shows/hides the dock. Hidden entirely when `collapsible` is false.
+    this._container = document.createElement('div');
+    this._container.className =
+      'maplibregl-ctrl maplibregl-ctrl-group maplibregl-time-slider-toggle';
+    const toggleBtn = document.createElement('button');
+    toggleBtn.type = 'button';
+    toggleBtn.className = 'maplibregl-time-slider-toggle-btn';
+    toggleBtn.setAttribute('aria-label', 'Toggle time slider');
+    toggleBtn.title = 'Toggle time slider';
+    toggleBtn.innerHTML = `
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <polyline points="12 6 12 12 16 14"/>
+      </svg>`;
+    toggleBtn.addEventListener('click', () => this.toggle());
+    this._container.appendChild(toggleBtn);
+    if (!this._options.collapsible) {
+      this._container.style.display = 'none';
     }
 
-    // Trigger initial onChange if labels exist
-    if (this._options.labels.length > 0 && this._options.onChange) {
-      this._options.onChange(this._state.currentIndex, this._options.labels[this._state.currentIndex]);
+    this._view = createDockView(this, {
+      theme: this._options.theme,
+      className: this._options.className,
+    });
+    this._installLayout();
+
+    for (const spec of this._options.sources) {
+      this.addSource(spec);
     }
 
+    this._applyCollapsed();
+    this._syncAll();
     return this._container;
   }
 
   /**
-   * Called when the control is removed from the map.
-   * Implements the IControl interface.
+   * Removes the control, all managed layers, and the dock.
    */
   onRemove(): void {
     this.pause();
-
-    // Remove event listeners
-    if (this._resizeHandler) {
-      window.removeEventListener('resize', this._resizeHandler);
-      this._resizeHandler = null;
+    for (const adapter of [...this._adapters]) {
+      adapter.remove();
     }
-    if (this._mapResizeHandler && this._map) {
-      this._map.off('resize', this._mapResizeHandler);
-      this._mapResizeHandler = null;
-    }
-    if (this._clickOutsideHandler) {
-      document.removeEventListener('click', this._clickOutsideHandler);
-      this._clickOutsideHandler = null;
-    }
-
-    // Remove panel from map container
-    this._panel?.parentNode?.removeChild(this._panel);
-
-    // Remove button container from control stack
+    this._adapters = [];
+    this._view?.destroy();
+    this._uninstallLayout();
+    this._view = undefined;
     this._container?.parentNode?.removeChild(this._container);
-
     this._map = undefined;
     this._mapContainer = undefined;
     this._container = undefined;
-    this._panel = undefined;
     this._eventHandlers.clear();
   }
 
+  // ----- State accessors (DockController) ---------------------------------
+
   /**
-   * Gets the current state of the control.
-   *
-   * @returns The current time slider state
+   * Returns a copy of the current state with cloned dates.
    */
   getState(): TimeSliderState {
-    return { ...this._state };
+    return {
+      ...this._state,
+      currentDate: new Date(this._state.currentDate),
+      startDate: new Date(this._state.startDate),
+      endDate: new Date(this._state.endDate),
+    };
   }
 
   /**
-   * Gets the current index.
-   *
-   * @returns The current index in the labels array
+   * Returns the current date.
    */
-  getCurrentIndex(): number {
-    return this._state.currentIndex;
+  getCurrentDate(): Date {
+    return new Date(this._state.currentDate);
   }
 
   /**
-   * Gets the current label.
-   *
-   * @returns The current label string
+   * Returns the granularities offered as pills.
    */
-  getCurrentLabel(): string {
-    return this._options.labels[this._state.currentIndex] || '';
+  getGranularities(): Granularity[] {
+    return [...this._options.granularities];
   }
 
   /**
-   * Gets all labels.
-   *
-   * @returns Array of all labels
+   * Returns the date-display token format. When no explicit `dateFormat` was
+   * provided, derives one from the active granularity (so an hourly timeline
+   * shows the hour, a yearly one shows just the year, etc.).
    */
-  getLabels(): string[] {
-    return [...this._options.labels];
+  getDateFormat(): string {
+    return this._options.dateFormat ?? this._defaultDateFormat();
   }
 
   /**
-   * Sets new labels for the slider.
-   *
-   * @param labels - Array of new labels
-   * @param resetIndex - Whether to reset the index to 0
+   * Granularity-appropriate default date format.
    */
-  setLabels(labels: string[], resetIndex = true): void {
-    this._options.labels = labels;
-    if (resetIndex || this._state.currentIndex >= labels.length) {
-      this._state.currentIndex = 0;
+  private _defaultDateFormat(): string {
+    switch (this._state.granularity) {
+      case 'hour':
+        return 'YYYY MMM DD HH:00';
+      case 'day':
+        return 'YYYY MMM DD';
+      case 'month':
+        return 'MMM YYYY';
+      case 'year':
+        return 'YYYY';
     }
-    this._updateSliderRange();
-    this._updateDisplay();
+  }
+
+  // ----- Collapse / expand ------------------------------------------------
+
+  /**
+   * Collapses the dock (hides it, leaving the corner toggle visible).
+   */
+  collapse(): void {
+    if (!this._state.collapsed) this.toggle();
+  }
+
+  /**
+   * Expands the dock.
+   */
+  expand(): void {
+    if (this._state.collapsed) this.toggle();
+  }
+
+  /**
+   * Toggles the dock between collapsed and expanded.
+   */
+  toggle(): void {
+    this._state.collapsed = !this._state.collapsed;
+    this._applyCollapsed();
+    this._emit(this._state.collapsed ? 'collapse' : 'expand');
     this._emit('statechange');
   }
 
   /**
-   * Navigates to a specific index.
-   *
-   * @param index - The index to navigate to
+   * Reflects the collapsed state in the DOM: shows/hides the dock and the corner
+   * toggle button, then resizes the map so it reclaims/yields the dock row.
    */
-  goTo(index: number): void {
-    const maxIndex = this._options.labels.length - 1;
-    const clampedIndex = Math.max(0, Math.min(index, maxIndex));
-
-    if (clampedIndex !== this._state.currentIndex) {
-      this._state.currentIndex = clampedIndex;
-      this._updateDisplay();
-      this._triggerChange();
-      this._emit('change');
-      this._emit('statechange');
+  private _applyCollapsed(): void {
+    const collapsed = this._state.collapsed;
+    if (this._view) {
+      this._view.root.classList.toggle('ts-collapsed', collapsed);
+    }
+    if (this._options.collapsible && this._container) {
+      this._container.style.display = collapsed ? '' : 'none';
+    }
+    // In reserve-space layout the map must resize to fill/yield the dock row.
+    if (this._wrapper) {
+      this._map?.resize();
     }
   }
 
   /**
-   * Moves to the next label.
+   * Installs the reserve-space layout: wraps the map container in a flex column
+   * and places the dock below it, so the map shrinks rather than being overlaid.
+   * Falls back to overlaying the dock when the container has no parent (e.g. a
+   * detached container in tests).
+   */
+  private _installLayout(): void {
+    const container = this._mapContainer;
+    const dock = this._view?.root;
+    if (!container || !dock) return;
+
+    const parent = container.parentElement;
+    if (!parent) {
+      // Detached container: overlay the dock at the bottom.
+      container.appendChild(dock);
+      return;
+    }
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'maplibregl-time-slider-layout';
+    this._wrapper = wrapper;
+
+    const cs = getComputedStyle(container);
+    wrapper.style.display = 'flex';
+    wrapper.style.flexDirection = 'column';
+    wrapper.style.overflow = 'hidden';
+    wrapper.style.position = cs.position === 'static' ? 'relative' : cs.position;
+    for (const side of ['top', 'right', 'bottom', 'left'] as const) {
+      const inline = container.style.getPropertyValue(side);
+      const value = inline || (cs.position !== 'static' ? cs.getPropertyValue(side) : '');
+      if (value && value !== 'auto') wrapper.style.setProperty(side, value);
+    }
+    wrapper.style.margin = cs.margin;
+    wrapper.style.zIndex = cs.zIndex !== 'auto' ? cs.zIndex : '';
+    wrapper.style.width = this._fillSize(container, 'width', cs.width);
+    wrapper.style.height = this._fillSize(container, 'height', cs.height);
+
+    parent.insertBefore(wrapper, container);
+
+    // Demote the map container to a flex child that fills the space above the dock.
+    this._savedContainerCss = container.getAttribute('style') ?? '';
+    container.style.position = 'relative';
+    container.style.top = '';
+    container.style.right = '';
+    container.style.bottom = '';
+    container.style.left = '';
+    container.style.margin = '0';
+    container.style.width = '100%';
+    container.style.height = 'auto';
+    container.style.flex = '1 1 auto';
+    container.style.minHeight = '0';
+
+    wrapper.appendChild(container);
+    dock.classList.add('ts-docked');
+    wrapper.appendChild(dock);
+
+    this._map?.resize();
+  }
+
+  /**
+   * Restores the original DOM/styles undone by {@link _installLayout}.
+   */
+  private _uninstallLayout(): void {
+    this._view?.root.classList.remove('ts-docked');
+    if (this._wrapper && this._mapContainer) {
+      const parent = this._wrapper.parentElement;
+      this._mapContainer.setAttribute('style', this._savedContainerCss ?? '');
+      parent?.insertBefore(this._mapContainer, this._wrapper);
+      this._wrapper.remove();
+      this._wrapper = undefined;
+      this._map?.resize();
+    }
+  }
+
+  /**
+   * Picks a CSS size for the wrapper that preserves responsiveness where
+   * possible: an inline value, a viewport unit when the container fills the
+   * viewport, otherwise the computed pixel size.
+   *
+   * @param el - The map container
+   * @param prop - 'width' or 'height'
+   * @param computed - The computed pixel value (fallback)
+   * @returns A CSS length string
+   */
+  private _fillSize(el: HTMLElement, prop: 'width' | 'height', computed: string): string {
+    const inline = el.style.getPropertyValue(prop);
+    if (inline) return inline;
+    const rect = el.getBoundingClientRect();
+    // Use '100%' for width (fills the content box without the vw scrollbar
+    // gutter that otherwise triggers a spurious horizontal scrollbar).
+    if (prop === 'width' && Math.abs(rect.width - window.innerWidth) <= 2) return '100%';
+    if (prop === 'height' && Math.abs(rect.height - window.innerHeight) <= 2) return '100vh';
+    return computed;
+  }
+
+  // ----- Navigation -------------------------------------------------------
+
+  /**
+   * Navigates to a date, snapping it to the nearest step. No-op if unchanged.
+   *
+   * @param date - The target date
+   */
+  goTo(date: Date): void {
+    const s = this._state;
+    const snapped = snapToStep(date, s.startDate, s.endDate, s.interval, s.granularity);
+    if (snapped.getTime() === s.currentDate.getTime()) return;
+    s.currentDate = snapped;
+    this._view?.syncDate();
+    this._dispatch(snapped);
+    this._options.onChange?.(new Date(snapped));
+    this._emit('change');
+    this._emit('statechange');
+  }
+
+  /**
+   * Advances one interval, wrapping to the start when looping at the end.
    */
   next(): void {
-    const maxIndex = this._options.labels.length - 1;
-    if (this._state.currentIndex < maxIndex) {
-      this.goTo(this._state.currentIndex + 1);
-    } else if (this._state.loop) {
-      this.goTo(0);
+    const s = this._state;
+    const candidate = nextStep(s.currentDate, s.startDate, s.endDate, s.interval, s.granularity);
+    if (candidate.getTime() === s.currentDate.getTime()) {
+      if (s.loop) this.goTo(s.startDate);
+    } else {
+      this.goTo(candidate);
     }
   }
 
   /**
-   * Moves to the previous label.
+   * Rewinds one interval, wrapping to the end when looping at the start.
    */
   prev(): void {
-    if (this._state.currentIndex > 0) {
-      this.goTo(this._state.currentIndex - 1);
-    } else if (this._state.loop) {
-      this.goTo(this._options.labels.length - 1);
+    const s = this._state;
+    const candidate = prevStep(s.currentDate, s.startDate, s.endDate, s.interval, s.granularity);
+    if (candidate.getTime() === s.currentDate.getTime()) {
+      if (s.loop) this.goTo(s.endDate);
+    } else {
+      this.goTo(candidate);
     }
   }
+
+  // ----- Playback ---------------------------------------------------------
 
   /**
    * Starts playback.
    */
   play(): void {
-    if (this._state.isPlaying || this._options.labels.length === 0) return;
-
+    if (this._state.isPlaying) return;
     this._state.isPlaying = true;
-    this._updatePlayButton();
-
-    this._playbackInterval = setInterval(() => {
-      const maxIndex = this._options.labels.length - 1;
-      if (this._state.currentIndex < maxIndex) {
-        this.goTo(this._state.currentIndex + 1);
-      } else if (this._state.loop) {
-        this.goTo(0);
-      } else {
-        this.pause();
-      }
-    }, this._state.speed);
-
+    this._view?.syncPlayState();
+    this._playbackInterval = setInterval(() => this._advance(), this._state.speed);
     this._emit('play');
     this._emit('statechange');
   }
@@ -282,106 +427,259 @@ export class TimeSliderControl implements IControl {
    */
   pause(): void {
     if (!this._state.isPlaying) return;
-
     this._state.isPlaying = false;
-    this._updatePlayButton();
-
+    this._view?.syncPlayState();
     if (this._playbackInterval) {
       clearInterval(this._playbackInterval);
       this._playbackInterval = undefined;
     }
-
     this._emit('pause');
     this._emit('statechange');
   }
 
   /**
-   * Toggles playback state.
+   * Toggles playback.
    */
   togglePlayback(): void {
-    if (this._state.isPlaying) {
-      this.pause();
+    if (this._state.isPlaying) this.pause();
+    else this.play();
+  }
+
+  /**
+   * Advances one step during playback, pausing at the end when not looping.
+   */
+  private _advance(): void {
+    const s = this._state;
+    const candidate = nextStep(s.currentDate, s.startDate, s.endDate, s.interval, s.granularity);
+    if (candidate.getTime() === s.currentDate.getTime()) {
+      if (s.loop) this.goTo(s.startDate);
+      else this.pause();
     } else {
-      this.play();
+      this.goTo(candidate);
     }
   }
 
   /**
-   * Sets the playback speed.
+   * Sets playback speed in milliseconds per step (minimum 100). Restarts the
+   * timer if currently playing.
    *
-   * @param speed - Speed in milliseconds
+   * @param ms - Milliseconds per step
    */
-  setSpeed(speed: number): void {
-    this._state.speed = Math.max(100, speed);
-    if (this._speedInput) {
-      this._speedInput.value = this._state.speed.toString();
-    }
-
-    // Restart playback with new speed if playing
+  setSpeed(ms: number): void {
+    this._state.speed = Math.max(100, ms);
+    this._view?.syncControls();
     if (this._state.isPlaying) {
-      this.pause();
-      this.play();
+      clearInterval(this._playbackInterval);
+      this._playbackInterval = setInterval(() => this._advance(), this._state.speed);
     }
-
     this._emit('statechange');
   }
 
   /**
-   * Sets the loop state.
+   * Enables or disables looping.
    *
-   * @param enabled - Whether to enable looping
+   * @param enabled - Whether to loop
    */
   setLoop(enabled: boolean): void {
     this._state.loop = enabled;
-    if (this._loopCheckbox) {
-      this._loopCheckbox.checked = enabled;
-    }
+    this._view?.syncControls();
+    this._emit('statechange');
+  }
+
+  // ----- Range / granularity ----------------------------------------------
+
+  /**
+   * Changes the active granularity, resetting the interval to 1 and re-snapping
+   * the current date.
+   *
+   * @param granularity - The new granularity
+   */
+  setGranularity(granularity: Granularity): void {
+    const s = this._state;
+    s.granularity = granularity;
+    s.interval = 1;
+    s.currentDate = snapToStep(s.currentDate, s.startDate, s.endDate, s.interval, granularity);
+    this._view?.syncGranularity();
+    this._view?.syncDate();
+    this._dispatch(s.currentDate);
+    this._emit('granularitychange');
     this._emit('statechange');
   }
 
   /**
-   * Toggles the collapsed state of the control panel.
+   * Updates the timeline range (and optionally interval/granularity),
+   * re-snapping the current date.
+   *
+   * @param start - New range start
+   * @param end - New range end
+   * @param interval - Optional new interval
+   * @param granularity - Optional new granularity
    */
-  toggle(): void {
-    this._state.collapsed = !this._state.collapsed;
+  setRange(
+    start: Date | string,
+    end: Date | string,
+    interval?: number,
+    granularity?: Granularity
+  ): void {
+    const s = this._state;
+    s.startDate = toDate(start);
+    s.endDate = toDate(end);
+    if (interval != null) s.interval = Math.max(1, Math.floor(interval));
+    if (granularity != null) s.granularity = granularity;
+    s.currentDate = snapToStep(s.currentDate, s.startDate, s.endDate, s.interval, s.granularity);
+    this._view?.syncRange();
+    this._view?.syncGranularity();
+    this._view?.syncDate();
+    this._dispatch(s.currentDate);
+    this._emit('rangechange');
+    this._emit('statechange');
+  }
 
-    if (this._panel) {
-      if (this._state.collapsed) {
-        this._panel.classList.remove('expanded');
-        this._emit('collapse');
-      } else {
-        this._panel.classList.add('expanded');
-        this._updatePanelPosition();
-        this._emit('expand');
+  // ----- Sources ----------------------------------------------------------
+
+  /**
+   * Returns shallow copies of the current source specs.
+   */
+  getSources(): SourceSpec[] {
+    return this._adapters.map((a) => ({ ...a.spec }));
+  }
+
+  /**
+   * Adds a managed source and renders it for the current date.
+   *
+   * @param spec - The source specification
+   * @returns The source/layer id
+   */
+  addSource(spec: SourceSpec): string {
+    if (!this._map) {
+      // Defer to onAdd by stashing the spec in options.
+      this._options.sources = [...this._options.sources, spec];
+      return spec.id ?? '';
+    }
+    const adapter = createAdapter(spec, {
+      map: this._map,
+      beforeId: this._options.beforeId,
+    });
+    this._adapters.push(adapter);
+    void Promise.resolve(adapter.add(this._state.currentDate)).catch(() => undefined);
+    this._view?.refreshLayers();
+    this._emit('sourceadd');
+    return adapter.id;
+  }
+
+  /**
+   * Removes a managed source by id.
+   *
+   * @param id - The source id
+   */
+  removeSource(id: string): void {
+    const index = this._adapters.findIndex((a) => a.id === id);
+    if (index === -1) return;
+    this._adapters[index].remove();
+    this._adapters.splice(index, 1);
+    this._view?.refreshLayers();
+    this._emit('sourceremove');
+  }
+
+  /**
+   * Sets a managed source's opacity.
+   *
+   * @param id - The source id
+   * @param opacity - Opacity in [0, 1]
+   */
+  setSourceOpacity(id: string, opacity: number): void {
+    this.setSourceProperty(id, { opacity } as Partial<SourceSpec>);
+  }
+
+  /**
+   * Applies a live property patch to a managed source (opacity and, for COG,
+   * colormap/rescale).
+   *
+   * @param id - The source id
+   * @param patch - Partial spec fields to merge
+   */
+  setSourceProperty(id: string, patch: Partial<SourceSpec>): void {
+    const adapter = this._adapters.find((a) => a.id === id);
+    if (!adapter) return;
+    Object.assign(adapter.spec as unknown as Record<string, unknown>, patch);
+    const rest = { ...patch } as Record<string, unknown>;
+    if ('opacity' in rest && typeof rest.opacity === 'number') {
+      adapter.setOpacity(rest.opacity);
+      delete rest.opacity;
+    }
+    if (Object.keys(rest).length > 0 && adapter.setProperty) {
+      void Promise.resolve(adapter.setProperty(rest as Partial<SourceSpec>)).catch(() => undefined);
+    }
+  }
+
+  // ----- Config -----------------------------------------------------------
+
+  /**
+   * Serializes the full timeline + layers configuration.
+   */
+  getConfig(): TimeSliderConfig {
+    const s = this._state;
+    return {
+      startDate: s.startDate.toISOString(),
+      endDate: s.endDate.toISOString(),
+      interval: s.interval,
+      granularity: s.granularity,
+      currentDate: s.currentDate.toISOString(),
+      speed: s.speed,
+      loop: s.loop,
+      sources: this.getSources(),
+    };
+  }
+
+  /**
+   * Restores a configuration produced by {@link getConfig}, replacing all
+   * current layers.
+   *
+   * @param config - The configuration to apply
+   */
+  setConfig(config: TimeSliderConfig): void {
+    this.pause();
+    for (const adapter of [...this._adapters]) {
+      adapter.remove();
+    }
+    this._adapters = [];
+
+    const s = this._state;
+    s.startDate = toDate(config.startDate);
+    s.endDate = toDate(config.endDate);
+    s.interval = Math.max(1, Math.floor(config.interval));
+    s.granularity = config.granularity;
+    s.currentDate = snapToStep(
+      toDate(config.currentDate),
+      s.startDate,
+      s.endDate,
+      s.interval,
+      s.granularity
+    );
+    s.speed = Math.max(100, config.speed);
+    s.loop = config.loop;
+
+    if (this._map) {
+      for (const spec of config.sources) {
+        const adapter = createAdapter(spec, { map: this._map, beforeId: this._options.beforeId });
+        this._adapters.push(adapter);
+        void Promise.resolve(adapter.add(s.currentDate)).catch(() => undefined);
       }
+    } else {
+      this._options.sources = [...config.sources];
     }
 
+    this._syncAll();
     this._emit('statechange');
   }
 
-  /**
-   * Expands the control panel.
-   */
-  expand(): void {
-    if (this._state.collapsed) {
-      this.toggle();
-    }
-  }
-
-  /**
-   * Collapses the control panel.
-   */
-  collapse(): void {
-    if (!this._state.collapsed) {
-      this.toggle();
-    }
-  }
+  // ----- Events -----------------------------------------------------------
 
   /**
    * Registers an event handler.
    *
-   * @param event - The event type to listen for
-   * @param handler - The callback function
+   * @param event - The event type
+   * @param handler - The callback
    */
   on(event: TimeSliderEvent, handler: TimeSliderEventHandler): void {
     if (!this._eventHandlers.has(event)) {
@@ -394,378 +692,60 @@ export class TimeSliderControl implements IControl {
    * Removes an event handler.
    *
    * @param event - The event type
-   * @param handler - The callback function to remove
+   * @param handler - The callback to remove
    */
   off(event: TimeSliderEvent, handler: TimeSliderEventHandler): void {
     this._eventHandlers.get(event)?.delete(handler);
   }
 
   /**
-   * Gets the map instance.
-   *
-   * @returns The MapLibre GL map instance or undefined if not added to a map
+   * Returns the map instance, if added.
    */
   getMap(): MapLibreMap | undefined {
     return this._map;
   }
 
   /**
-   * Gets the control container element.
-   *
-   * @returns The container element or undefined if not added to a map
+   * Returns the control anchor element, if added.
    */
   getContainer(): HTMLElement | undefined {
     return this._container;
   }
 
+  // ----- Internals --------------------------------------------------------
+
+  /**
+   * Pushes a date change to every active adapter (async, fire-and-forget).
+   *
+   * @param date - The new date
+   */
+  private _dispatch(date: Date): void {
+    for (const adapter of this._adapters) {
+      void Promise.resolve(adapter.update(date)).catch(() => undefined);
+    }
+  }
+
+  /**
+   * Re-renders all dock surfaces from the current state.
+   */
+  private _syncAll(): void {
+    this._view?.syncRange();
+    this._view?.syncGranularity();
+    this._view?.syncDate();
+    this._view?.syncControls();
+    this._view?.refreshLayers();
+  }
+
   /**
    * Emits an event to all registered handlers.
    *
-   * @param event - The event type to emit
+   * @param event - The event type
    */
   private _emit(event: TimeSliderEvent): void {
     const handlers = this._eventHandlers.get(event);
     if (handlers) {
-      const eventData = { type: event, state: this.getState() };
-      handlers.forEach((handler) => handler(eventData));
-    }
-  }
-
-  /**
-   * Triggers the onChange callback.
-   */
-  private _triggerChange(): void {
-    if (this._options.onChange) {
-      this._options.onChange(this._state.currentIndex, this._options.labels[this._state.currentIndex]);
-    }
-  }
-
-  /**
-   * Updates the label display and slider position.
-   */
-  private _updateDisplay(): void {
-    if (this._labelDisplay) {
-      const label = this._options.labels[this._state.currentIndex] || '';
-      const total = this._options.labels.length;
-      this._labelDisplay.textContent = `${label} (${this._state.currentIndex + 1}/${total})`;
-    }
-
-    if (this._slider) {
-      this._slider.value = this._state.currentIndex.toString();
-    }
-  }
-
-  /**
-   * Updates the slider range based on labels.
-   */
-  private _updateSliderRange(): void {
-    if (this._slider) {
-      this._slider.max = Math.max(0, this._options.labels.length - 1).toString();
-    }
-  }
-
-  /**
-   * Updates the play button appearance.
-   */
-  private _updatePlayButton(): void {
-    if (this._playButton) {
-      this._playButton.innerHTML = this._state.isPlaying
-        ? '<span class="time-slider-btn-icon">&#9724;</span> Pause'
-        : '<span class="time-slider-btn-icon">&#9654;</span> Play';
-    }
-  }
-
-  /**
-   * Creates the main container element for the control.
-   *
-   * @returns The container element
-   */
-  private _createContainer(): HTMLElement {
-    const container = document.createElement('div');
-    container.className = `maplibregl-ctrl maplibregl-ctrl-group time-slider-control${
-      this._options.className ? ` ${this._options.className}` : ''
-    }`;
-
-    // Create toggle button with clock icon
-    const toggleBtn = document.createElement('button');
-    toggleBtn.className = 'time-slider-control-toggle';
-    toggleBtn.type = 'button';
-    toggleBtn.setAttribute('aria-label', this._options.title);
-    toggleBtn.innerHTML = `
-      <span class="time-slider-control-icon">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="10"/>
-          <polyline points="12 6 12 12 16 14"/>
-        </svg>
-      </span>
-    `;
-    toggleBtn.addEventListener('click', () => this.toggle());
-
-    container.appendChild(toggleBtn);
-
-    return container;
-  }
-
-  /**
-   * Creates the panel element with all controls.
-   *
-   * @returns The panel element
-   */
-  private _createPanel(): HTMLElement {
-    const panel = document.createElement('div');
-    panel.className = 'time-slider-control-panel';
-    panel.style.width = `${this._options.panelWidth}px`;
-
-    // Create header
-    const header = document.createElement('div');
-    header.className = 'time-slider-control-header';
-
-    const title = document.createElement('span');
-    title.className = 'time-slider-control-title';
-    title.textContent = this._options.title;
-
-    const closeBtn = document.createElement('button');
-    closeBtn.className = 'time-slider-control-close';
-    closeBtn.type = 'button';
-    closeBtn.setAttribute('aria-label', 'Close panel');
-    closeBtn.innerHTML = '&times;';
-    closeBtn.addEventListener('click', () => this.collapse());
-
-    header.appendChild(title);
-    header.appendChild(closeBtn);
-
-    // Create content
-    const content = document.createElement('div');
-    content.className = 'time-slider-control-content';
-
-    // Label display
-    this._labelDisplay = document.createElement('div');
-    this._labelDisplay.className = 'time-slider-label-display';
-    const initialLabel = this._options.labels[this._state.currentIndex] || '';
-    const total = this._options.labels.length;
-    this._labelDisplay.textContent = total > 0 ? `${initialLabel} (${this._state.currentIndex + 1}/${total})` : 'No data';
-
-    // Slider
-    this._slider = document.createElement('input');
-    this._slider.type = 'range';
-    this._slider.className = 'time-slider-range';
-    this._slider.min = '0';
-    this._slider.max = Math.max(0, this._options.labels.length - 1).toString();
-    this._slider.value = this._state.currentIndex.toString();
-    this._slider.addEventListener('input', (e) => {
-      const value = parseInt((e.target as HTMLInputElement).value, 10);
-      this.goTo(value);
-    });
-
-    // Control buttons
-    const controls = document.createElement('div');
-    controls.className = 'time-slider-controls';
-
-    const prevBtn = document.createElement('button');
-    prevBtn.className = 'time-slider-btn time-slider-prev';
-    prevBtn.type = 'button';
-    prevBtn.innerHTML = '<span class="time-slider-btn-icon">&#9664;</span> Prev';
-    prevBtn.addEventListener('click', () => this.prev());
-
-    this._playButton = document.createElement('button');
-    this._playButton.className = 'time-slider-btn time-slider-play';
-    this._playButton.type = 'button';
-    this._playButton.innerHTML = '<span class="time-slider-btn-icon">&#9654;</span> Play';
-    this._playButton.addEventListener('click', () => this.togglePlayback());
-
-    const nextBtn = document.createElement('button');
-    nextBtn.className = 'time-slider-btn time-slider-next';
-    nextBtn.type = 'button';
-    nextBtn.innerHTML = 'Next <span class="time-slider-btn-icon">&#9654;</span>';
-    nextBtn.addEventListener('click', () => this.next());
-
-    controls.appendChild(prevBtn);
-    controls.appendChild(this._playButton);
-    controls.appendChild(nextBtn);
-
-    // Settings row
-    const settings = document.createElement('div');
-    settings.className = 'time-slider-settings';
-
-    // Speed control
-    const speedLabel = document.createElement('label');
-    speedLabel.className = 'time-slider-setting';
-    speedLabel.innerHTML = 'Speed: ';
-
-    this._speedInput = document.createElement('input');
-    this._speedInput.type = 'number';
-    this._speedInput.className = 'time-slider-speed-input';
-    this._speedInput.value = this._state.speed.toString();
-    this._speedInput.min = '100';
-    this._speedInput.step = '100';
-    this._speedInput.addEventListener('change', (e) => {
-      const value = parseInt((e.target as HTMLInputElement).value, 10);
-      this.setSpeed(value);
-    });
-
-    const msLabel = document.createElement('span');
-    msLabel.textContent = ' ms';
-
-    speedLabel.appendChild(this._speedInput);
-    speedLabel.appendChild(msLabel);
-
-    // Loop checkbox
-    const loopLabel = document.createElement('label');
-    loopLabel.className = 'time-slider-setting time-slider-loop-label';
-
-    this._loopCheckbox = document.createElement('input');
-    this._loopCheckbox.type = 'checkbox';
-    this._loopCheckbox.className = 'time-slider-loop-checkbox';
-    this._loopCheckbox.checked = this._state.loop;
-    this._loopCheckbox.addEventListener('change', (e) => {
-      this.setLoop((e.target as HTMLInputElement).checked);
-    });
-
-    const loopText = document.createElement('span');
-    loopText.textContent = ' Loop';
-
-    loopLabel.appendChild(this._loopCheckbox);
-    loopLabel.appendChild(loopText);
-
-    settings.appendChild(speedLabel);
-    settings.appendChild(loopLabel);
-
-    // Assemble content
-    content.appendChild(this._labelDisplay);
-    content.appendChild(this._slider);
-    content.appendChild(controls);
-    content.appendChild(settings);
-
-    // Add Layer button at the bottom (if callback provided)
-    if (this._options.onAddLayer) {
-      this._addLayerButton = document.createElement('button');
-      this._addLayerButton.className = 'time-slider-btn time-slider-add-layer';
-      this._addLayerButton.type = 'button';
-      this._addLayerButton.innerHTML = '<span class="time-slider-btn-icon">&#43;</span> Add Layer';
-      this._addLayerButton.title = 'Add current time period as a persistent layer';
-      this._addLayerButton.addEventListener('click', () => {
-        if (this._options.onAddLayer) {
-          this._options.onAddLayer(
-            this._state.currentIndex,
-            this._options.labels[this._state.currentIndex],
-            this._options.beforeId
-          );
-        }
-      });
-      content.appendChild(this._addLayerButton);
-    }
-
-    panel.appendChild(header);
-    panel.appendChild(content);
-
-    return panel;
-  }
-
-  /**
-   * Setup event listeners for panel positioning and click-outside behavior.
-   */
-  private _setupEventListeners(): void {
-    // Click outside to close (check both container and panel since they're now separate)
-    this._clickOutsideHandler = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (
-        this._container &&
-        this._panel &&
-        !this._container.contains(target) &&
-        !this._panel.contains(target)
-      ) {
-        this.collapse();
-      }
-    };
-    document.addEventListener('click', this._clickOutsideHandler);
-
-    // Update panel position on window resize
-    this._resizeHandler = () => {
-      if (!this._state.collapsed) {
-        this._updatePanelPosition();
-      }
-    };
-    window.addEventListener('resize', this._resizeHandler);
-
-    // Update panel position on map resize (e.g., sidebar toggle)
-    this._mapResizeHandler = () => {
-      if (!this._state.collapsed) {
-        this._updatePanelPosition();
-      }
-    };
-    this._map?.on('resize', this._mapResizeHandler);
-  }
-
-  /**
-   * Detect which corner the control is positioned in.
-   *
-   * @returns The position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
-   */
-  private _getControlPosition(): 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' {
-    const parent = this._container?.parentElement;
-    if (!parent) return 'top-right'; // Default
-
-    if (parent.classList.contains('maplibregl-ctrl-top-left')) return 'top-left';
-    if (parent.classList.contains('maplibregl-ctrl-top-right')) return 'top-right';
-    if (parent.classList.contains('maplibregl-ctrl-bottom-left')) return 'bottom-left';
-    if (parent.classList.contains('maplibregl-ctrl-bottom-right')) return 'bottom-right';
-
-    return 'top-right'; // Default
-  }
-
-  /**
-   * Update the panel position based on button location and control corner.
-   * Positions the panel next to the button, expanding in the appropriate direction.
-   */
-  private _updatePanelPosition(): void {
-    if (!this._container || !this._panel || !this._mapContainer) return;
-
-    // Get the toggle button (first child of container)
-    const button = this._container.querySelector('.time-slider-control-toggle');
-    if (!button) return;
-
-    const buttonRect = button.getBoundingClientRect();
-    const mapRect = this._mapContainer.getBoundingClientRect();
-    const position = this._getControlPosition();
-
-    // Calculate button position relative to map container
-    const buttonTop = buttonRect.top - mapRect.top;
-    const buttonBottom = mapRect.bottom - buttonRect.bottom;
-    const buttonLeft = buttonRect.left - mapRect.left;
-    const buttonRight = mapRect.right - buttonRect.right;
-
-    const panelGap = 5; // Gap between button and panel
-
-    // Reset all positioning
-    this._panel.style.top = '';
-    this._panel.style.bottom = '';
-    this._panel.style.left = '';
-    this._panel.style.right = '';
-
-    switch (position) {
-      case 'top-left':
-        // Panel expands down and to the right
-        this._panel.style.top = `${buttonTop + buttonRect.height + panelGap}px`;
-        this._panel.style.left = `${buttonLeft}px`;
-        break;
-
-      case 'top-right':
-        // Panel expands down and to the left
-        this._panel.style.top = `${buttonTop + buttonRect.height + panelGap}px`;
-        this._panel.style.right = `${buttonRight}px`;
-        break;
-
-      case 'bottom-left':
-        // Panel expands up and to the right
-        this._panel.style.bottom = `${buttonBottom + buttonRect.height + panelGap}px`;
-        this._panel.style.left = `${buttonLeft}px`;
-        break;
-
-      case 'bottom-right':
-        // Panel expands up and to the left
-        this._panel.style.bottom = `${buttonBottom + buttonRect.height + panelGap}px`;
-        this._panel.style.right = `${buttonRight}px`;
-        break;
+      const data = { type: event, state: this.getState() };
+      handlers.forEach((handler) => handler(data));
     }
   }
 }
