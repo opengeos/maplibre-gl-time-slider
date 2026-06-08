@@ -74,6 +74,41 @@ describe('axisRenderer', () => {
     axis.destroy();
   });
 
+  it('thins overlapping tick labels to fit the track width', () => {
+    const axis = createAxis(
+      baseController({
+        getState: () => ({
+          ...STATE,
+          startDate: new Date('2020-01-01T00:00:00Z'),
+          endDate: new Date('2022-12-31T00:00:00Z'),
+          granularity: 'day',
+        }),
+      })
+    );
+    document.body.appendChild(axis.root);
+    const track = axis.root.querySelector('.ts-axis-track') as HTMLElement;
+    const origRect = Element.prototype.getBoundingClientRect;
+    // 200px-wide track; each label measures 40px. Only a few fit without overlap.
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: Element
+    ) {
+      if (this === track)
+        return { left: 0, width: 200, top: 0, right: 200, bottom: 10, height: 10 } as DOMRect;
+      if ((this as HTMLElement).classList.contains('ts-tick-label'))
+        return { left: 0, width: 40, top: 0, right: 40, bottom: 10, height: 10 } as DOMRect;
+      return origRect.call(this);
+    });
+
+    axis.renderTicks();
+    const labels = Array.from(axis.root.querySelectorAll('.ts-tick-label')) as HTMLElement[];
+    const visible = labels.filter((l) => l.style.display !== 'none');
+    // ~36 monthly labels are generated, but a 200px track fits at most ~5 of 40px.
+    expect(labels.length).toBeGreaterThan(10);
+    expect(visible.length).toBeLessThan(labels.length);
+    expect(visible.length).toBeLessThanOrEqual(6);
+    axis.destroy();
+  });
+
   it('positions the marker at the current date fraction', () => {
     const axis = createAxis(
       baseController({
