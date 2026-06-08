@@ -411,9 +411,8 @@
   right: 12px;
   bottom: calc(100% + 8px);
   width: 300px;
-  max-height: 60vh;
-  overflow-y: auto;
-  padding: 10px;
+  min-width: 240px;
+  max-width: 640px;
   display: none;
   background: var(--ts-bg);
   border: 1px solid var(--ts-border);
@@ -424,6 +423,57 @@
 
 .ts-layers.ts-open .ts-popover {
   display: block;
+}
+
+/* Scrollable content area, kept separate from the popover so the resize grip
+ * (a direct child of the popover) does not scroll away with the content. */
+.ts-popover-scroll {
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 10px;
+}
+
+/* Drag handle for resizing the popover width. Sits on the free-to-grow edge. */
+.ts-resize-grip {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 10px;
+  cursor: ew-resize;
+  z-index: 6;
+  touch-action: none;
+}
+
+.ts-resize-grip.ts-grip-left {
+  left: -2px;
+}
+
+.ts-resize-grip.ts-grip-right {
+  right: -2px;
+}
+
+/* Subtle visual affordance: a vertical accent line that brightens on hover. */
+.ts-resize-grip::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  left: 3px;
+  width: 3px;
+  height: 32px;
+  border-radius: 3px;
+  background: var(--ts-border);
+  transition: background 0.15s ease;
+}
+
+.ts-resize-grip:hover::before {
+  background: var(--ts-accent);
+}
+
+/* While dragging, suppress text selection and force the resize cursor. */
+body.ts-resizing {
+  cursor: ew-resize;
+  user-select: none;
 }
 
 .ts-layer-list {
@@ -452,7 +502,20 @@
 .ts-layer-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 6px;
+}
+
+.ts-layer-visible {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.ts-layer-visible input {
+  accent-color: var(--ts-accent);
+  cursor: pointer;
+  margin: 0;
 }
 
 .ts-layer-name {
@@ -462,6 +525,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1 1 auto;
 }
 
 .ts-layer-remove {
@@ -538,6 +602,13 @@
 .ts-check-group input {
   accent-color: var(--ts-accent);
   cursor: pointer;
+}
+
+/* ----- Layers ----- */
+.ts-layers-section {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--ts-border);
 }
 
 /* "Layers" section heading above the layer list. */
@@ -624,6 +695,17 @@
     left: 8px;
     right: 8px;
     width: auto;
+    min-width: 0;
+    max-width: none;
+  }
+
+  .ts-popover-scroll {
     max-height: 66vh;
+  }
+
+  /* The full-width mobile popover spans the screen, so width resizing does not
+   * apply; hide the grip to avoid an unusable handle. */
+  .ts-resize-grip {
+    display: none;
   }
 }

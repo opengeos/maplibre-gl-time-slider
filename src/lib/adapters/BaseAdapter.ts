@@ -33,6 +33,19 @@ export abstract class BaseAdapter implements SourceAdapter {
   abstract setOpacity(opacity: number): void;
 
   /**
+   * Shows or hides the managed layer via its MapLibre `visibility` layout
+   * property. Every adapter renders a single layer keyed by {@link id}, so this
+   * is handled uniformly here.
+   *
+   * @param visible - Whether the layer should be visible
+   */
+  setVisible(visible: boolean): void {
+    if (this.map.getLayer?.(this.id)) {
+      this.map.setLayoutProperty(this.id, 'visibility', visible ? 'visible' : 'none');
+    }
+  }
+
+  /**
    * Removes the managed layer then source if they exist.
    */
   remove(): void {

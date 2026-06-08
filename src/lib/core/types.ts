@@ -49,6 +49,13 @@ interface BaseSourceSpec {
   opacity?: number;
 
   /**
+   * Whether the layer is visible. Toggling this hides/shows the layer without
+   * removing it from the map.
+   * @default true
+   */
+  visible?: boolean;
+
+  /**
    * ID of an existing map layer to insert this layer before.
    */
   beforeId?: string;

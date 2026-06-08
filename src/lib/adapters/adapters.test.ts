@@ -75,6 +75,19 @@ describe('XyzAdapter', () => {
     adapter.setOpacity(0.4);
     expect(map.setPaintProperty).toHaveBeenCalledWith('x2', 'raster-opacity', 0.4);
   });
+
+  it('toggles layer visibility via the visibility layout property', async () => {
+    const { map } = createStubMap();
+    const adapter = new XyzAdapter(
+      { type: 'xyz', id: 'x3', tiles: 'https://t/{z}/{x}/{y}.png' },
+      { map }
+    );
+    await adapter.add(d1);
+    adapter.setVisible(false);
+    expect(map.setLayoutProperty).toHaveBeenCalledWith('x3', 'visibility', 'none');
+    adapter.setVisible(true);
+    expect(map.setLayoutProperty).toHaveBeenCalledWith('x3', 'visibility', 'visible');
+  });
 });
 
 describe('WmsAdapter', () => {

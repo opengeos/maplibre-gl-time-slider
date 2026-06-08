@@ -148,6 +148,81 @@ function colormapSelect(current?: string): HTMLSelectElement {
   return select;
 }
 
+/** Min/max popover width (px) enforced while dragging the resize grip. */
+const POPOVER_MIN_WIDTH = 240;
+const POPOVER_MAX_WIDTH = 640;
+
+/**
+ * Makes the popover horizontally resizable via a drag grip. The grip is placed
+ * on whichever edge is free to grow (opposite the anchored edge), so it works
+ * whether the panel is anchored to the left or the right corner.
+ *
+ * @param popover - The popover element to make resizable
+ * @returns A handle with `syncSide` to re-place the grip when the panel opens
+ */
+function enablePopoverResize(popover: HTMLElement): { syncSide: () => void } {
+  const grip = document.createElement('div');
+  grip.className = 'ts-resize-grip';
+  popover.appendChild(grip);
+
+  // True when the popover is anchored on its right edge, so it grows leftward.
+  let growLeft = true;
+
+  /**
+   * Determines the free-to-grow direction by comparing how much space the
+   * popover has on each side within the dock bounds (the full-width control),
+   * falling back to the viewport. The popover grows toward the side with more
+   * room, away from the corner it is anchored to. The dock is used rather than
+   * the popover's offset parent because that parent is the narrow right cluster,
+   * which the popover overflows and which would give a misleading measurement.
+   */
+  const measureGrowLeft = (): boolean => {
+    const rect = popover.getBoundingClientRect();
+    const host = popover.closest('.maplibregl-time-slider-dock') as HTMLElement | null;
+    const bounds = host ? host.getBoundingClientRect() : { left: 0, right: window.innerWidth };
+    return rect.left - bounds.left > bounds.right - rect.right;
+  };
+
+  const syncSide = (): void => {
+    growLeft = measureGrowLeft();
+    grip.classList.toggle('ts-grip-left', growLeft);
+    grip.classList.toggle('ts-grip-right', !growLeft);
+  };
+
+  let startX = 0;
+  let startWidth = 0;
+
+  const onMove = (e: PointerEvent): void => {
+    const dx = e.clientX - startX;
+    const delta = growLeft ? -dx : dx;
+    const width = Math.min(POPOVER_MAX_WIDTH, Math.max(POPOVER_MIN_WIDTH, startWidth + delta));
+    popover.style.width = `${width}px`;
+  };
+
+  const onUp = (e: PointerEvent): void => {
+    grip.releasePointerCapture?.(e.pointerId);
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', onUp);
+    document.body.classList.remove('ts-resizing');
+  };
+
+  grip.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    growLeft = measureGrowLeft();
+    startX = e.clientX;
+    startWidth = popover.getBoundingClientRect().width;
+    grip.setPointerCapture?.(e.pointerId);
+    document.body.classList.add('ts-resizing');
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  });
+  // Clicking the grip should never bubble up to the document close handler.
+  grip.addEventListener('click', (e) => e.stopPropagation());
+
+  return { syncSide };
+}
+
 /**
  * Builds the "Add data" button plus its popover: a timeline range section, the
  * current layer list (opacity, COG colormap/rescale, remove), and a form to add
@@ -167,6 +242,10 @@ export function createLayersPopover(controller: DockController): LayersHandle {
 
   const popover = document.createElement('div');
   popover.className = 'ts-popover';
+  // Inner scroll container so the resize grip (a child of the popover) stays
+  // pinned to the edge instead of scrolling away with the content.
+  const scroll = document.createElement('div');
+  scroll.className = 'ts-popover-scroll';
 
   const timeline = buildTimelineSection(controller);
   const settings = buildSettingsSection(controller);
@@ -184,8 +263,13 @@ export function createLayersPopover(controller: DockController): LayersHandle {
 
   const form = buildForm(controller, () => refresh());
 
-  popover.append(timeline.section, settings.section, layersSection, form);
+  // Layers go last so the cards sit at the bottom of the panel, below the
+  // add-data form, rather than floating in the middle.
+  scroll.append(timeline.section, settings.section, form, layersSection);
+  popover.append(scroll);
   root.append(toggleBtn, popover);
+
+  const resize = enablePopoverResize(popover);
 
   const close = (): void => root.classList.remove('ts-open');
   toggleBtn.addEventListener('click', (e) => {
@@ -195,6 +279,9 @@ export function createLayersPopover(controller: DockController): LayersHandle {
     if (opening) {
       timeline.sync();
       settings.sync();
+      // The popover only has measurable dimensions once shown, so place the
+      // grip on the free edge now.
+      resize.syncSide();
     }
   });
   popover.addEventListener('click', (e) => e.stopPropagation());
@@ -419,6 +506,22 @@ function buildLayerRow(controller: DockController, spec: SourceSpec): HTMLElemen
 
   const header = document.createElement('div');
   header.className = 'ts-layer-head';
+
+  // Visibility toggle: hides/shows the layer without removing it.
+  const visible = document.createElement('label');
+  visible.className = 'ts-layer-visible';
+  visible.title = 'Toggle visibility';
+  const visibleInput = document.createElement('input');
+  visibleInput.type = 'checkbox';
+  visibleInput.checked = spec.visible !== false;
+  visibleInput.setAttribute('aria-label', 'Toggle layer visibility');
+  visibleInput.addEventListener('change', () =>
+    controller.setSourceProperty(spec.id!, {
+      visible: visibleInput.checked,
+    } as Partial<SourceSpec>)
+  );
+  visible.appendChild(visibleInput);
+
   const name = document.createElement('span');
   name.className = 'ts-layer-name';
   name.textContent = spec.name ?? spec.id ?? spec.type;
@@ -428,7 +531,7 @@ function buildLayerRow(controller: DockController, spec: SourceSpec): HTMLElemen
   remove.setAttribute('aria-label', 'Remove layer');
   remove.innerHTML = '&times;';
   remove.addEventListener('click', () => controller.removeSource(spec.id!));
-  header.append(name, remove);
+  header.append(visible, name, remove);
 
   const opacity = document.createElement('input');
   opacity.type = 'range';
