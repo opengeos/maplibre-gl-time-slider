@@ -157,7 +157,10 @@ describe('layersPopover', () => {
     const setRange = vi.fn();
     const setGranularities = vi.fn();
     const setSpeed = vi.fn();
-    const popover = createLayersPopover(baseController({ setRange, setGranularities, setSpeed }));
+    const goTo = vi.fn();
+    const popover = createLayersPopover(
+      baseController({ setRange, setGranularities, setSpeed, goTo })
+    );
     document.body.appendChild(popover.root);
     const select = popover.root.querySelector('.ts-type-select') as HTMLSelectElement;
 
@@ -166,6 +169,8 @@ describe('layersPopover', () => {
     expect(setGranularities).toHaveBeenCalledWith(['month']);
     expect(setRange).toHaveBeenCalledWith('2015-01-01', '2015-12-31', 1, 'month');
     expect(setSpeed).toHaveBeenCalledWith(1000);
+    // Every example starts at its start date.
+    expect(goTo).toHaveBeenCalledWith(new Date('2015-01-01'));
 
     popover.destroy();
   });

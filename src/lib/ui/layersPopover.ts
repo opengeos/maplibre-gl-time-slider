@@ -62,8 +62,6 @@ const COLORMAPS = [
 interface ExampleTimeline {
   startDate: string;
   endDate: string;
-  /** Optional date to jump to after applying the range. */
-  initialDate?: string;
   granularity: Granularity;
   granularities: Granularity[];
   speed: number;
@@ -105,7 +103,6 @@ const EXAMPLES: Record<Exclude<SourceSpec['type'], 'custom'>, Example> = {
     timeline: {
       startDate: '2023-08-01',
       endDate: '2023-08-31',
-      initialDate: '2023-08-15',
       granularity: 'day',
       granularities: ['day'],
       speed: 600,
@@ -136,7 +133,6 @@ const EXAMPLES: Record<Exclude<SourceSpec['type'], 'custom'>, Example> = {
     timeline: {
       startDate: '2023-08-01',
       endDate: '2023-08-31',
-      initialDate: '2023-08-15',
       granularity: 'day',
       granularities: ['day'],
       speed: 600,
@@ -837,7 +833,9 @@ function buildForm(
     controller.setGranularities(t.granularities);
     controller.setRange(t.startDate, t.endDate, 1, t.granularity);
     controller.setSpeed(t.speed);
-    if (t.initialDate) controller.goTo(new Date(t.initialDate));
+    // Start every example at its start date rather than wherever the previous
+    // current date happens to snap to within the new range.
+    controller.goTo(new Date(t.startDate));
     onConfigApplied();
   };
 
