@@ -67,8 +67,12 @@
   }
 }
 
-/* Container - matches maplibregl-ctrl styling */
-.time-slider-control {
+/* Container - matches maplibregl-ctrl styling.
+ * The selector is intentionally scoped to .maplibregl-ctrl-group so the themed
+ * background reliably wins over MapLibre's own `.maplibregl-ctrl-group{background:#fff}`
+ * regardless of stylesheet import order (otherwise the dark toggle would stay
+ * white and the light icon would have no contrast). */
+.maplibregl-ctrl-group.time-slider-control {
   background: var(--ts-bg);
   border-radius: 4px;
   box-shadow: 0 0 0 2px var(--ts-shadow);
@@ -90,7 +94,9 @@
   color: var(--ts-fg-strong);
 }
 
-.time-slider-control-toggle:hover {
+/* Scoped to beat MapLibre's `.maplibregl-ctrl button:not(:disabled):hover`
+ * so the hover overlay matches the active theme. */
+.maplibregl-ctrl-group.time-slider-control .time-slider-control-toggle:hover {
   background-color: var(--ts-hover-overlay);
 }
 
