@@ -14,6 +14,7 @@ A MapLibre GL JS plugin for visualizing time series vector and raster data with 
 - Built-in TiTiler integration for Cloud Optimized GeoTIFFs (COGs)
 - **Add Layer button** for persisting time periods as permanent layers for comparison
 - Customizable playback speed and loop settings
+- Automatic light/dark theming that follows the system color scheme
 - Control layer ordering with `beforeId` parameter
 - React component and hooks support
 - TypeScript support with full type definitions
@@ -284,7 +285,7 @@ Builds a TiTiler XYZ tile URL for MapLibre raster sources.
 ```typescript
 const tileUrl = buildTiTilerTileUrl({
   url: 'https://example.com/my-cog.tif',
-  endpoint: 'https://giswqs-titiler-endpoint.hf.space',  // optional, default
+  endpoint: 'https://titiler.d2s.org',  // optional, default
   colormap: 'viridis',              // optional, default
   rescale: [-10, 10],               // optional
   bidx: [1],                        // optional, band indexes
@@ -307,6 +308,35 @@ Fetches metadata about a COG file.
 #### getTiTilerStatistics(url, endpoint?)
 
 Fetches statistics (min, max, mean, std) for each band.
+
+## Theming
+
+The control adapts to the system color scheme automatically. It ships with a
+light palette by default and switches to a dark palette via the
+`@media (prefers-color-scheme: dark)` query, matching the user's OS or browser
+preference. No configuration is required.
+
+All colors are exposed as CSS custom properties, so you can override the palette
+(or pin a specific theme) by redefining the variables on the control elements:
+
+```css
+/* Override the accent color in both themes */
+.time-slider-control,
+.time-slider-control-panel {
+  --ts-accent: #e0533d;
+  --ts-accent-hover: #c8472f;
+  --ts-accent-active: #b03d28;
+}
+
+/* Force the dark palette regardless of the system setting */
+.time-slider-control,
+.time-slider-control-panel {
+  --ts-bg: #2b2b2b;
+  --ts-fg: #e6e6e6;
+  --ts-border: #444;
+  /* ...see src/lib/styles/time-slider-control.css for the full list */
+}
+```
 
 ## Development
 
