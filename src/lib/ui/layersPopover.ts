@@ -128,6 +128,7 @@ const EXAMPLES: Record<Exclude<SourceSpec['type'], 'custom'>, Example> = {
     fields: {
       data: 'https://maplibre.org/maplibre-gl-js/docs/assets/significant-earthquakes-2015.geojson',
       timeProperty: 'time',
+      window: 'month',
     },
   },
   // NASA GIBS time-enabled WMS GetMap endpoint (MapLibre fills {bbox-epsg-3857}).
@@ -779,13 +780,21 @@ function buildForm(
   const tilesField = field('Tile URL', 'https://.../{z}/{x}/{y}.png?d={YYYY}-{MM}-{DD}');
   const dataField = field('GeoJSON URL', 'https://.../data.geojson');
   const timePropField = field('Time property', 'time');
+  // Time window: features are kept for `[date, date + 1 unit)`. Defaults to the
+  // granularity so features match the active timeline step (a day window with a
+  // monthly timeline would show almost nothing).
+  const windowField = selectField(
+    'Time window',
+    GRANULARITIES.map((g) => ({ value: g, label: g[0].toUpperCase() + g.slice(1) }))
+  );
+  windowField.select.value = 'day';
   const baseUrlField = field('WMS base URL', 'https://.../wms?service=WMS');
   const wmsLayersField = field('WMS layers', 'layer-name');
 
   const groups: Record<SourceSpec['type'], HTMLElement[]> = {
     cog: [urlField.row, cmapRow, rescaleRow, nodataField.row, bandsField.row],
     xyz: [tilesField.row],
-    geojson: [dataField.row, timePropField.row],
+    geojson: [dataField.row, timePropField.row, windowField.row],
     wms: [baseUrlField.row, wmsLayersField.row],
     custom: [],
   };
@@ -811,6 +820,7 @@ function buildForm(
       const f = EXAMPLES.geojson.fields;
       dataField.input.value = f.data;
       timePropField.input.value = f.timeProperty;
+      windowField.select.value = f.window;
     } else if (type === 'wms' && !baseUrlField.input.value) {
       const f = EXAMPLES.wms.fields;
       baseUrlField.input.value = f.baseUrl;
@@ -886,6 +896,7 @@ function buildForm(
         name,
         data: dataField.input.value,
         timeProperty: timePropField.input.value || 'time',
+        window: { unit: windowField.select.value as Granularity, before: 0, after: 1 },
       };
     } else if (type === 'wms' && baseUrlField.input.value) {
       spec = {
@@ -935,6 +946,7 @@ function buildForm(
     rescaleMin.value = '';
     rescaleMax.value = '';
     cmapSelect.value = '';
+    windowField.select.value = 'day';
     onAdded();
   });
 

@@ -206,6 +206,27 @@ describe('layersPopover', () => {
     popover.destroy();
   });
 
+  it('includes the selected time window when adding a GeoJSON layer', () => {
+    const addSource = vi.fn(() => 'id');
+    const popover = createLayersPopover(baseController({ addSource }));
+    document.body.appendChild(popover.root);
+    const select = popover.root.querySelector('.ts-type-select') as HTMLSelectElement;
+    select.value = 'geojson';
+    select.dispatchEvent(new Event('change'));
+
+    (popover.root.querySelector('.ts-add-submit') as HTMLButtonElement).click();
+    expect(addSource).toHaveBeenCalledTimes(1);
+    const spec = addSource.mock.calls[0][0] as {
+      type: string;
+      window?: { unit: string; before: number; after: number };
+    };
+    expect(spec.type).toBe('geojson');
+    // The GeoJSON example uses a monthly window so features match its timeline.
+    expect(spec.window).toEqual({ unit: 'month', before: 0, after: 1 });
+
+    popover.destroy();
+  });
+
   it('renders the settings section and wires controls to controller setters', () => {
     const setGranularity = vi.fn();
     const setSpeed = vi.fn();

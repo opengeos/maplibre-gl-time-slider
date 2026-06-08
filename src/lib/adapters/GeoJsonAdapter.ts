@@ -21,6 +21,23 @@ const GEOMETRY_CONFIG = {
 };
 
 /**
+ * Visible default paint per geometry, used when a spec provides none. MapLibre's
+ * built-in defaults (tiny black fills) are easy to miss, so these give an
+ * unstyled layer a sensible, clearly visible appearance. User-supplied paint
+ * always overrides these.
+ */
+const DEFAULT_PAINT: Record<keyof typeof GEOMETRY_CONFIG, Record<string, unknown>> = {
+  circle: {
+    'circle-radius': 6,
+    'circle-color': '#ff5533',
+    'circle-stroke-color': '#ffffff',
+    'circle-stroke-width': 1,
+  },
+  fill: { 'fill-color': '#3388ff' },
+  line: { 'line-color': '#3388ff', 'line-width': 2 },
+};
+
+/**
  * Builds a MapLibre filter expression that keeps features whose time property
  * falls inside the window `[date - before, date + after)` around the date.
  *
@@ -75,6 +92,7 @@ export class GeoJsonAdapter extends BaseAdapter {
     const geometry = this.spec.geometry ?? 'circle';
     const { layerType } = GEOMETRY_CONFIG[geometry];
     const paint = {
+      ...DEFAULT_PAINT[geometry],
       ...(this.spec.paint?.[geometry] ?? {}),
       [this.opacityKey]: this.opacity,
     };

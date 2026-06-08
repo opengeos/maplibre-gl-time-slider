@@ -162,6 +162,35 @@ describe('GeoJsonAdapter', () => {
     adapter.update(d2);
     expect(map.setFilter).toHaveBeenCalledWith('g1', buildTimeFilter('time', d2, { unit: 'day' }));
   });
+
+  it('applies a visible default circle style when no paint is given', () => {
+    const { map } = createStubMap();
+    const adapter = new GeoJsonAdapter(
+      { type: 'geojson', id: 'g2', data: 'https://x.geojson', timeProperty: 'time' },
+      { map }
+    );
+    adapter.add(d1);
+    const layerArg = (map.addLayer as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(layerArg.paint['circle-radius']).toBe(6);
+    expect(layerArg.paint['circle-color']).toBe('#ff5533');
+  });
+
+  it('lets a spec override the default paint', () => {
+    const { map } = createStubMap();
+    const adapter = new GeoJsonAdapter(
+      {
+        type: 'geojson',
+        id: 'g3',
+        data: 'https://x.geojson',
+        timeProperty: 'time',
+        paint: { circle: { 'circle-color': '#000' } },
+      },
+      { map }
+    );
+    adapter.add(d1);
+    const layerArg = (map.addLayer as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(layerArg.paint['circle-color']).toBe('#000');
+  });
 });
 
 describe('createAdapter', () => {
