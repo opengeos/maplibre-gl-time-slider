@@ -59,6 +59,15 @@ interface BaseSourceSpec {
    * ID of an existing map layer to insert this layer before.
    */
   beforeId?: string;
+
+  /**
+   * Geographic extent of the source as `[west, south, east, north]` in
+   * longitude/latitude. For raster sources (COG / XYZ / WMS) this is passed to
+   * MapLibre so it never requests tiles outside the data footprint, which avoids
+   * a flood of 404s for tile servers (such as TiTiler) that error on
+   * out-of-bounds tiles. Ignored by non-tiled sources.
+   */
+  bounds?: [number, number, number, number];
 }
 
 /**

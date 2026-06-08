@@ -81,6 +81,8 @@ function whenResolved<T>(value: T | Promise<T>, fn: (v: T) => void): void | Prom
 export abstract class RasterAdapter extends BaseAdapter {
   protected tileSize = 256;
   protected attribution?: string;
+  /** Optional `[west, south, east, north]` extent limiting tile requests. */
+  protected bounds?: [number, number, number, number];
   private requestSeq = 0;
 
   /**
@@ -104,6 +106,9 @@ export abstract class RasterAdapter extends BaseAdapter {
       type: 'raster',
       tiles: [tiles],
       tileSize: this.tileSize,
+      // Constraining the source to the data extent stops MapLibre from
+      // requesting (and erroring on) tiles outside the footprint.
+      ...(this.bounds ? { bounds: this.bounds } : {}),
       ...(this.attribution ? { attribution: this.attribution } : {}),
     });
     this.map.addLayer(

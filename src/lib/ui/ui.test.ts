@@ -127,6 +127,85 @@ describe('layersPopover', () => {
     popover.destroy();
   });
 
+  it('pre-fills the example URL when a source type is selected', () => {
+    const popover = createLayersPopover(baseController());
+    document.body.appendChild(popover.root);
+    const select = popover.root.querySelector('.ts-type-select') as HTMLSelectElement;
+    const tiles = (): HTMLInputElement =>
+      popover.root.querySelectorAll(
+        '.ts-add-form .ts-form-fields .ts-field input'
+      )[2] as HTMLInputElement;
+
+    select.value = 'xyz';
+    select.dispatchEvent(new Event('change'));
+    const filled = tiles().value;
+    expect(filled).toContain('gibs.earthdata.nasa.gov');
+    expect(filled).toContain('{z}/{y}/{x}');
+
+    // An edited value is preserved when switching types away and back.
+    tiles().value = 'https://custom/{z}/{x}/{y}.png';
+    select.value = 'geojson';
+    select.dispatchEvent(new Event('change'));
+    select.value = 'xyz';
+    select.dispatchEvent(new Event('change'));
+    expect(tiles().value).toBe('https://custom/{z}/{x}/{y}.png');
+
+    popover.destroy();
+  });
+
+  it('applies the example timeline/settings when a source type is selected', () => {
+    const setRange = vi.fn();
+    const setGranularities = vi.fn();
+    const setSpeed = vi.fn();
+    const popover = createLayersPopover(baseController({ setRange, setGranularities, setSpeed }));
+    document.body.appendChild(popover.root);
+    const select = popover.root.querySelector('.ts-type-select') as HTMLSelectElement;
+
+    select.value = 'geojson';
+    select.dispatchEvent(new Event('change'));
+    expect(setGranularities).toHaveBeenCalledWith(['month']);
+    expect(setRange).toHaveBeenCalledWith('2015-01-01', '2015-12-31', 1, 'month');
+    expect(setSpeed).toHaveBeenCalledWith(1000);
+
+    popover.destroy();
+  });
+
+  it('includes the COG bands field as bidx when adding a layer', async () => {
+    // COG adds fetch the data bounds; stub fetch so the add path is deterministic.
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('no network')));
+    const addSource = vi.fn(() => 'id');
+    const popover = createLayersPopover(baseController({ addSource }));
+    document.body.appendChild(popover.root);
+    (popover.root.querySelector('.ts-add-data') as HTMLButtonElement).click();
+
+    // COG is the default type; its example (Landsat) pre-fills url + bands 1,2,3.
+    (popover.root.querySelector('.ts-add-submit') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(addSource).toHaveBeenCalledTimes(1));
+    const spec = addSource.mock.calls[0][0] as { bidx?: number[]; url?: string };
+    expect(spec.url).toContain('landsat_ts');
+    expect(spec.bidx).toEqual([1, 2, 3]);
+
+    vi.unstubAllGlobals();
+    popover.destroy();
+  });
+
+  it('fetches and attaches the COG footprint as bounds on add', async () => {
+    const bounds = [-74.7, -8.6, -74.2, -8.3];
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ bounds }) }));
+    const addSource = vi.fn(() => 'id');
+    const popover = createLayersPopover(baseController({ addSource }));
+    document.body.appendChild(popover.root);
+    (popover.root.querySelector('.ts-add-data') as HTMLButtonElement).click();
+
+    (popover.root.querySelector('.ts-add-submit') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(addSource).toHaveBeenCalledTimes(1));
+    const spec = addSource.mock.calls[0][0] as { bounds?: number[] };
+    expect(spec.bounds).toEqual(bounds);
+
+    vi.unstubAllGlobals();
+    popover.destroy();
+  });
+
   it('renders the settings section and wires controls to controller setters', () => {
     const setGranularity = vi.fn();
     const setSpeed = vi.fn();
@@ -224,7 +303,8 @@ describe('layersPopover', () => {
     popover.destroy();
   });
 
-  it('offers a None colormap option for multi-band COG imagery', () => {
+  it('offers a None colormap option for multi-band COG imagery', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('no network')));
     const addSource = vi.fn(() => 'id');
     const popover = createLayersPopover(baseController({ addSource }));
     document.body.appendChild(popover.root);
@@ -242,9 +322,10 @@ describe('layersPopover', () => {
     cmap.value = '';
     (popover.root.querySelector('.ts-add-submit') as HTMLButtonElement).click();
 
-    expect(addSource).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(addSource).toHaveBeenCalledTimes(1));
     expect((addSource.mock.calls[0][0] as { colormap?: string }).colormap).toBeUndefined();
 
+    vi.unstubAllGlobals();
     popover.destroy();
   });
 });

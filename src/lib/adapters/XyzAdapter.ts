@@ -19,6 +19,7 @@ export class XyzAdapter extends RasterAdapter {
     this.spec = spec;
     this.tileSize = spec.tileSize ?? 256;
     this.attribution = spec.attribution;
+    this.bounds = spec.bounds;
   }
 
   protected resolveTiles(date: Date): string | Promise<string> {

@@ -76,6 +76,18 @@ describe('XyzAdapter', () => {
     expect(map.setPaintProperty).toHaveBeenCalledWith('x2', 'raster-opacity', 0.4);
   });
 
+  it('passes bounds to the raster source when provided', async () => {
+    const { map } = createStubMap();
+    const bounds: [number, number, number, number] = [-74.7, -8.6, -74.2, -8.3];
+    const adapter = new XyzAdapter(
+      { type: 'xyz', id: 'xb', tiles: 'https://t/{z}/{x}/{y}.png', bounds },
+      { map }
+    );
+    await adapter.add(d1);
+    const srcArg = (map.addSource as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    expect(srcArg.bounds).toEqual(bounds);
+  });
+
   it('toggles layer visibility via the visibility layout property', async () => {
     const { map } = createStubMap();
     const adapter = new XyzAdapter(

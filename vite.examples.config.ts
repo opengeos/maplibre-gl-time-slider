@@ -17,6 +17,7 @@ export default defineConfig({
         vector: resolve(__dirname, 'examples/vector/index.html'),
         pace: resolve(__dirname, 'examples/pace/index.html'),
         worldview: resolve(__dirname, 'examples/worldview/index.html'),
+        landsat: resolve(__dirname, 'examples/landsat/index.html'),
       },
     },
   },

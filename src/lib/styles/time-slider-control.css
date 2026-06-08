@@ -555,7 +555,14 @@ body.ts-resizing {
 
 .ts-cog-controls input {
   min-width: 0;
-  flex: 1 1 auto;
+  flex: 1 1 0;
+}
+
+/* Keep the colormap dropdown from dominating the row; let it share space with
+ * the rescale/nodata inputs (a touch wider so its labels stay readable). */
+.ts-cog-controls .ts-cmap {
+  min-width: 0;
+  flex: 2 1 0;
 }
 
 /* ----- Settings ----- */
