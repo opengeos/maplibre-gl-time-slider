@@ -72,8 +72,8 @@ export interface CogSourceSpec extends BaseSourceSpec {
   endpoint?: string;
 
   /**
-   * Colormap name applied by TiTiler.
-   * @default 'viridis'
+   * Colormap name applied by TiTiler. When omitted, no colormap is applied,
+   * which is the correct behavior for RGB / multi-band imagery.
    */
   colormap?: string;
 
@@ -292,6 +292,12 @@ export interface TimeSliderOptions {
   loop?: boolean;
 
   /**
+   * Whether playback starts automatically once the control is added to the map.
+   * @default false
+   */
+  autoPlay?: boolean;
+
+  /**
    * Color theme. `'auto'` follows the system preference.
    * @default 'auto'
    */
@@ -406,6 +412,8 @@ export interface TimeSliderConfig {
   currentDate: string;
   speed: number;
   loop: boolean;
+  /** Whether playback starts automatically when the control is added. */
+  autoPlay?: boolean;
   sources: SourceSpec[];
   /** Granularities offered as pills. */
   granularities?: Granularity[];

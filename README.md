@@ -19,7 +19,7 @@ A MapLibre GL JS plugin for visualizing time series raster and vector data with 
   - **XYZ / WMTS** raster tiles
   - **WMS-Time** (OGC `TIME` parameter)
   - **GeoJSON** filtered by a time property
-- **"Add data" GUI** to set the timeline range/interval and add layers at runtime (name, id, per-layer opacity, and for COG a colormap dropdown, rescale, and nodata)
+- **"Add data" GUI** to configure the timeline (range, interval, initial date), tweak settings (granularity, which granularities show as pills, speed, loop, theme, date format, auto-play), and add layers at runtime (name, id, per-layer opacity, and for COG a colormap dropdown with a "None" option for RGB / multi-band imagery, rescale, and nodata)
 - Time-to-URL templating with tokens (`{YYYY}`, `{MM}`, `{DD}`, `{HH}`, `{date:FORMAT}`) **or** a `(date) => url` function
 - `onChange` callback escape hatch for fully custom wiring
 - Serializable config (`getConfig` / `setConfig`) for sharing state
@@ -104,7 +104,12 @@ function MyMap() {
           endDate="2024-04-28"
           granularity="day"
           sources={[
-            { type: 'cog', id: 'chla', url: 'https://example.com/chla_{date:YYYY-MM-DD}.tif' },
+            {
+              type: 'cog',
+              id: 'chla',
+              url: 'https://example.com/chla_{date:YYYY-MM-DD}.tif',
+              colormap: 'viridis',
+            },
           ]}
           onChange={(date) => console.log(date)}
         />
@@ -206,6 +211,7 @@ Main control class implementing MapLibre's `IControl` interface.
 | `initialDate` | `Date \| string` | `startDate` | Date the marker starts at |
 | `speed` | `number` | `1000` | Playback speed in ms per step |
 | `loop` | `boolean` | `true` | Whether playback loops |
+| `autoPlay` | `boolean` | `false` | Start playback automatically once the control is added to the map |
 | `theme` | `'auto' \| 'light' \| 'dark'` | `'auto'` | Color theme |
 | `dateFormat` | `string` | by granularity | Token format for the marker's date label. Defaults to a granularity-appropriate format (hour→`YYYY MMM DD HH:00`, day→`YYYY MMM DD`, month→`MMM YYYY`, year→`YYYY`) |
 | `collapsible` | `boolean` | `true` | Show a corner toggle button to collapse/expand the dock |
@@ -223,8 +229,12 @@ Main control class implementing MapLibre's `IControl` interface.
 | `next()` / `prev()` | Step one interval (honoring loop) |
 | `goTo(date)` | Navigate to a date (snapped to a step) |
 | `setSpeed(ms)` / `setLoop(enabled)` | Playback settings |
+| `setAutoPlay(enabled)` | Set whether playback auto-starts on add (affects re-adds and serialized config) |
+| `setTheme(theme)` | Change the color theme (applied live) |
+| `setDateFormat(format?)` | Set the date-label token format (applied live; omit for the granularity default) |
 | `setRange(start, end, interval?, granularity?)` | Update the range |
-| `setGranularity(granularity)` | Change granularity |
+| `setGranularity(granularity)` | Change the active granularity |
+| `setGranularities(granularities)` | Set which granularities are offered as pills |
 | `collapse()` / `expand()` / `toggle()` | Hide / show the dock |
 | `addSource(spec)` | Add a managed source; returns its id |
 | `removeSource(id)` | Remove a managed source |

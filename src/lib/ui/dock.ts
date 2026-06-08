@@ -66,6 +66,9 @@ export function createDockView(controller: DockController, options: DockOptions 
       axis.renderTicks();
       axis.setMarker();
     },
+    syncGranularities() {
+      pills.rebuild();
+    },
     syncControls() {
       playback.syncInputs();
     },
