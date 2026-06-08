@@ -19,7 +19,7 @@ A MapLibre GL JS plugin for visualizing time series raster and vector data with 
   - **XYZ / WMTS** raster tiles
   - **WMS-Time** (OGC `TIME` parameter)
   - **GeoJSON** filtered by a time property
-- **"Add data" GUI** to configure the timeline (range, interval, initial date), tweak settings (granularity, which granularities show as pills, speed, loop, theme, date format, auto-play), and add layers at runtime (name, id, per-layer opacity, and for COG a colormap dropdown with a "None" option for RGB / multi-band imagery, rescale, and nodata)
+- **"Add data" GUI** (a resizable panel) to configure the timeline (range, interval, initial date), tweak settings (granularity, which granularities show as pills, speed, loop, theme, date format, auto-play), and add layers at runtime. Picking a source type loads a ready-to-run example (URL, timeline, and settings) you can edit. Per-layer controls include opacity, a visibility toggle, and for COG a colormap dropdown with a "None" option for RGB / multi-band imagery, rescale, nodata, and band selection
 - Time-to-URL templating with tokens (`{YYYY}`, `{MM}`, `{DD}`, `{HH}`, `{date:FORMAT}`) **or** a `(date) => url` function
 - `onChange` callback escape hatch for fully custom wiring
 - Serializable config (`getConfig` / `setConfig`) for sharing state
@@ -129,16 +129,24 @@ Pass one or more `sources` (or add them later with `addSource`, or via the
 "Add data" button in the UI). Every source maps the current date to data; URL
 fields accept a **token template** or a **`(date) => string` function**.
 
+All source types share these optional fields: `id`, `name` (shown in the layers
+panel), `opacity`, `visible` (toggle a layer on/off without removing it), and
+`beforeId`. Raster types (`cog` / `xyz` / `wms`) also accept `bounds`
+(`[west, south, east, north]`) to limit tile requests to the data footprint,
+which avoids 404 floods from tile servers that error on out-of-bounds tiles.
+
 ### COG (via TiTiler)
 
 ```typescript
 {
   type: 'cog',
   url: 'https://example.com/{date:YYYY-MM-DD}.tif', // or (date) => url
-  colormap: 'viridis',
+  colormap: 'viridis',     // omit for RGB / multi-band imagery
   rescale: [0, 1],
+  bidx: [1, 2, 3],         // band indexes; e.g. RGB from a multi-band COG
   nodata: 'nan',
   opacity: 0.8,
+  bounds: [-74.7, -8.6, -74.2, -8.3], // optional data footprint
 }
 ```
 
