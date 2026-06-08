@@ -27,6 +27,13 @@ export interface DockController {
   setLoop(enabled: boolean): void;
   /** Change the active granularity. */
   setGranularity(granularity: Granularity): void;
+  /** Update the timeline range (and optionally interval/granularity). */
+  setRange(
+    start: Date | string,
+    end: Date | string,
+    interval?: number,
+    granularity?: Granularity
+  ): void;
   /** Collapse (hide) the dock. */
   collapse(): void;
 

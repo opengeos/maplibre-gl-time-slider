@@ -19,7 +19,7 @@ A MapLibre GL JS plugin for visualizing time series raster and vector data with 
   - **XYZ / WMTS** raster tiles
   - **WMS-Time** (OGC `TIME` parameter)
   - **GeoJSON** filtered by a time property
-- **"Add data" GUI** to add layers at runtime, with per-layer opacity and (for COG) colormap/rescale
+- **"Add data" GUI** to set the timeline range/interval and add layers at runtime (name, id, per-layer opacity, and for COG a colormap dropdown, rescale, and nodata)
 - Time-to-URL templating with tokens (`{YYYY}`, `{MM}`, `{DD}`, `{HH}`, `{date:FORMAT}`) **or** a `(date) => url` function
 - `onChange` callback escape hatch for fully custom wiring
 - Serializable config (`getConfig` / `setConfig`) for sharing state

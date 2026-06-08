@@ -281,7 +281,9 @@
 
 .ts-tick-label {
   position: absolute;
-  top: 15px;
+  /* Anchor to the tick's baseline edge (constant) so the label sits below the
+   * ticks regardless of tick height, instead of being overlapped by tall ticks. */
+  bottom: -17px;
   left: 0;
   transform: translateX(-50%);
   font-size: 10px;
@@ -386,14 +388,16 @@
 }
 
 /* ----- Layers popover ----- */
+/* Static so the popover anchors to .ts-right (full dock height) and floats
+ * clearly above the whole dock rather than the small button. */
 .ts-layers {
-  position: relative;
+  position: static;
 }
 
 .ts-popover {
   position: absolute;
-  right: 0;
-  bottom: calc(100% + 10px);
+  right: 12px;
+  bottom: calc(100% + 8px);
   width: 300px;
   max-height: 60vh;
   overflow-y: auto;

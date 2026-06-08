@@ -27,6 +27,7 @@ function baseController(overrides: Partial<DockController> = {}): DockController
     setSpeed: vi.fn(),
     setLoop: vi.fn(),
     setGranularity: vi.fn(),
+    setRange: vi.fn(),
     collapse: vi.fn(),
     getSources: () => [],
     addSource: vi.fn(() => 'id'),
@@ -98,8 +99,9 @@ describe('layersPopover', () => {
     select.value = 'xyz';
     select.dispatchEvent(new Event('change'));
 
-    const inputs = popover.root.querySelectorAll('.ts-form-fields .ts-field input');
-    (inputs[1] as HTMLInputElement).value = 'https://t/{z}/{x}/{y}.png';
+    // Add-form fields for xyz: name, id, tiles.
+    const inputs = popover.root.querySelectorAll('.ts-add-form .ts-form-fields .ts-field input');
+    (inputs[2] as HTMLInputElement).value = 'https://t/{z}/{x}/{y}.png';
 
     (popover.root.querySelector('.ts-add-submit') as HTMLButtonElement).click();
     expect(addSource).toHaveBeenCalledTimes(1);

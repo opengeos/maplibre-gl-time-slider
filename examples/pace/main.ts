@@ -31,7 +31,7 @@ map.on('load', () => {
   // so a single token template drives the whole time series.
   const timeSlider = new TimeSliderControl({
     startDate: '2024-04-18',
-    endDate: '2024-04-22',
+    endDate: '2024-10-03',
     granularity: 'day',
     sources: [
       {
