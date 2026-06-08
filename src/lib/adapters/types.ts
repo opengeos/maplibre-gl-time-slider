@@ -53,6 +53,13 @@ export interface SourceAdapter {
   setOpacity(opacity: number): void;
 
   /**
+   * Shows or hides the layer without removing it from the map.
+   *
+   * @param visible - Whether the layer should be visible
+   */
+  setVisible(visible: boolean): void;
+
+  /**
    * Applies a live property patch (e.g. colormap/rescale for COG layers).
    *
    * @param patch - Partial spec fields to merge

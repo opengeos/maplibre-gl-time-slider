@@ -1,6 +1,8 @@
 import type { CogSourceSpec, Granularity, SourceSpec } from '../core/types';
 import { formatDate } from '../template/dateFormat';
+import { resolveUrl } from '../template/urlTemplate';
 import { GRANULARITIES } from '../time/granularity';
+import { getTiTilerBounds } from '../utils/titiler';
 import type { DockController } from './types';
 
 /**
@@ -53,6 +55,97 @@ const COLORMAPS = [
   'gist_earth',
   'ocean',
 ];
+
+/**
+ * Timeline + settings that accompany an example source.
+ */
+interface ExampleTimeline {
+  startDate: string;
+  endDate: string;
+  granularity: Granularity;
+  granularities: Granularity[];
+  speed: number;
+}
+
+/**
+ * A ready-to-run example, one per source type, taken from the bundled examples.
+ * Selecting a type in the add-data form pre-fills the form fields *and* applies
+ * the matching timeline/settings to the control, so a user can click "Add layer"
+ * and immediately see a working layer (or edit the values first).
+ */
+interface Example {
+  timeline: ExampleTimeline;
+  /** Add-form field values to pre-fill (keys match the type's fields). */
+  fields: Record<string, string>;
+}
+
+const EXAMPLES: Record<Exclude<SourceSpec['type'], 'custom'>, Example> = {
+  // Annual Landsat false-color composites served through TiTiler (examples/landsat).
+  cog: {
+    timeline: {
+      startDate: '1984-01-01',
+      endDate: '2013-01-01',
+      granularity: 'year',
+      granularities: ['year'],
+      speed: 800,
+    },
+    fields: {
+      url: 'https://data.source.coop/giswqs/opengeos/landsat_ts/{date:YYYY}.tif',
+      colormap: '',
+      rescaleMin: '0',
+      rescaleMax: '110',
+      nodata: '0',
+      bands: '1,2,3',
+    },
+  },
+  // NASA GIBS MODIS Terra True Color WMTS imagery (examples/worldview).
+  xyz: {
+    timeline: {
+      startDate: '2023-08-01',
+      endDate: '2023-08-31',
+      granularity: 'day',
+      granularities: ['day'],
+      speed: 600,
+    },
+    fields: {
+      tiles:
+        'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor' +
+        '/default/{date:YYYY-MM-DD}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg',
+    },
+  },
+  // Significant earthquakes GeoJSON filtered by a time property (examples/vector).
+  geojson: {
+    timeline: {
+      startDate: '2015-01-01',
+      endDate: '2015-12-31',
+      granularity: 'month',
+      granularities: ['month'],
+      speed: 1000,
+    },
+    fields: {
+      data: 'https://maplibre.org/maplibre-gl-js/docs/assets/significant-earthquakes-2015.geojson',
+      timeProperty: 'time',
+      window: 'month',
+    },
+  },
+  // NASA GIBS time-enabled WMS GetMap endpoint (MapLibre fills {bbox-epsg-3857}).
+  wms: {
+    timeline: {
+      startDate: '2023-08-01',
+      endDate: '2023-08-31',
+      granularity: 'day',
+      granularities: ['day'],
+      speed: 600,
+    },
+    fields: {
+      baseUrl:
+        'https://gibs.earthdata.nasa.gov/wms/epsg3857/best/wms.cgi?version=1.3.0&service=WMS' +
+        '&request=GetMap&format=image/png&transparent=true&CRS=EPSG:3857' +
+        '&width=256&height=256&bbox={bbox-epsg-3857}',
+      layers: 'MODIS_Terra_CorrectedReflectance_TrueColor',
+    },
+  },
+};
 
 /**
  * Creates a labeled input row.
@@ -144,8 +237,85 @@ function colormapSelect(current?: string): HTMLSelectElement {
     opt.textContent = cmap;
     select.appendChild(opt);
   }
-  select.value = current ?? 'viridis';
+  // Default to "None" (empty) when no colormap is set, which is correct for
+  // RGB / multi-band COGs and avoids implying a colormap that is not applied.
+  select.value = current ?? '';
   return select;
+}
+
+/** Min/max popover width (px) enforced while dragging the resize grip. */
+const POPOVER_MIN_WIDTH = 240;
+const POPOVER_MAX_WIDTH = 640;
+
+/**
+ * Makes the popover horizontally resizable via a drag grip. The grip is placed
+ * on whichever edge is free to grow (opposite the anchored edge), so it works
+ * whether the panel is anchored to the left or the right corner.
+ *
+ * @param popover - The popover element to make resizable
+ * @returns A handle with `syncSide` to re-place the grip when the panel opens
+ */
+function enablePopoverResize(popover: HTMLElement): { syncSide: () => void } {
+  const grip = document.createElement('div');
+  grip.className = 'ts-resize-grip';
+  popover.appendChild(grip);
+
+  // True when the popover is anchored on its right edge, so it grows leftward.
+  let growLeft = true;
+
+  /**
+   * Determines the free-to-grow direction by comparing how much space the
+   * popover has on each side within the dock bounds (the full-width control),
+   * falling back to the viewport. The popover grows toward the side with more
+   * room, away from the corner it is anchored to. The dock is used rather than
+   * the popover's offset parent because that parent is the narrow right cluster,
+   * which the popover overflows and which would give a misleading measurement.
+   */
+  const measureGrowLeft = (): boolean => {
+    const rect = popover.getBoundingClientRect();
+    const host = popover.closest('.maplibregl-time-slider-dock') as HTMLElement | null;
+    const bounds = host ? host.getBoundingClientRect() : { left: 0, right: window.innerWidth };
+    return rect.left - bounds.left > bounds.right - rect.right;
+  };
+
+  const syncSide = (): void => {
+    growLeft = measureGrowLeft();
+    grip.classList.toggle('ts-grip-left', growLeft);
+    grip.classList.toggle('ts-grip-right', !growLeft);
+  };
+
+  let startX = 0;
+  let startWidth = 0;
+
+  const onMove = (e: PointerEvent): void => {
+    const dx = e.clientX - startX;
+    const delta = growLeft ? -dx : dx;
+    const width = Math.min(POPOVER_MAX_WIDTH, Math.max(POPOVER_MIN_WIDTH, startWidth + delta));
+    popover.style.width = `${width}px`;
+  };
+
+  const onUp = (e: PointerEvent): void => {
+    grip.releasePointerCapture?.(e.pointerId);
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', onUp);
+    document.body.classList.remove('ts-resizing');
+  };
+
+  grip.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    growLeft = measureGrowLeft();
+    startX = e.clientX;
+    startWidth = popover.getBoundingClientRect().width;
+    grip.setPointerCapture?.(e.pointerId);
+    document.body.classList.add('ts-resizing');
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  });
+  // Clicking the grip should never bubble up to the document close handler.
+  grip.addEventListener('click', (e) => e.stopPropagation());
+
+  return { syncSide };
 }
 
 /**
@@ -167,6 +337,10 @@ export function createLayersPopover(controller: DockController): LayersHandle {
 
   const popover = document.createElement('div');
   popover.className = 'ts-popover';
+  // Inner scroll container so the resize grip (a child of the popover) stays
+  // pinned to the edge instead of scrolling away with the content.
+  const scroll = document.createElement('div');
+  scroll.className = 'ts-popover-scroll';
 
   const timeline = buildTimelineSection(controller);
   const settings = buildSettingsSection(controller);
@@ -182,10 +356,26 @@ export function createLayersPopover(controller: DockController): LayersHandle {
   list.className = 'ts-layer-list';
   layersSection.append(layersTitle, list);
 
-  const form = buildForm(controller, () => refresh());
+  // Selecting an example applies its timeline/settings to the control, so the
+  // Timeline and Settings sections need to re-read state afterwards.
+  const form = buildForm(
+    controller,
+    () => refresh(),
+    () => {
+      timeline.sync();
+      settings.sync();
+    }
+  );
 
-  popover.append(timeline.section, settings.section, layersSection, form);
+  // Section order: the add-data form comes first so that selecting a source
+  // (which applies the example's timeline/settings) only updates sections below
+  // it, never overwriting selections sitting above. Settings and Timeline
+  // follow, with the Layers list last.
+  scroll.append(form, settings.section, timeline.section, layersSection);
+  popover.append(scroll);
   root.append(toggleBtn, popover);
+
+  const resize = enablePopoverResize(popover);
 
   const close = (): void => root.classList.remove('ts-open');
   toggleBtn.addEventListener('click', (e) => {
@@ -195,6 +385,9 @@ export function createLayersPopover(controller: DockController): LayersHandle {
     if (opening) {
       timeline.sync();
       settings.sync();
+      // The popover only has measurable dimensions once shown, so place the
+      // grip on the free edge now.
+      resize.syncSide();
     }
   });
   popover.addEventListener('click', (e) => e.stopPropagation());
@@ -419,16 +612,34 @@ function buildLayerRow(controller: DockController, spec: SourceSpec): HTMLElemen
 
   const header = document.createElement('div');
   header.className = 'ts-layer-head';
+
+  const layerLabel = spec.name ?? spec.id ?? spec.type;
+
+  // Visibility toggle: hides/shows the layer without removing it.
+  const visible = document.createElement('label');
+  visible.className = 'ts-layer-visible';
+  visible.title = 'Toggle visibility';
+  const visibleInput = document.createElement('input');
+  visibleInput.type = 'checkbox';
+  visibleInput.checked = spec.visible !== false;
+  visibleInput.setAttribute('aria-label', `Toggle visibility for ${layerLabel}`);
+  visibleInput.addEventListener('change', () =>
+    controller.setSourceProperty(spec.id!, {
+      visible: visibleInput.checked,
+    } as Partial<SourceSpec>)
+  );
+  visible.appendChild(visibleInput);
+
   const name = document.createElement('span');
   name.className = 'ts-layer-name';
-  name.textContent = spec.name ?? spec.id ?? spec.type;
+  name.textContent = layerLabel;
   const remove = document.createElement('button');
   remove.type = 'button';
   remove.className = 'ts-layer-remove';
   remove.setAttribute('aria-label', 'Remove layer');
   remove.innerHTML = '&times;';
   remove.addEventListener('click', () => controller.removeSource(spec.id!));
-  header.append(name, remove);
+  header.append(visible, name, remove);
 
   const opacity = document.createElement('input');
   opacity.type = 'range';
@@ -505,10 +716,19 @@ function buildCogControls(controller: DockController, spec: CogSourceSpec): HTML
 
 /**
  * Builds the add-data form: name/id fields, a type selector with type-specific
- * fields (colormap/rescale for COG only), and an Add button. Calls `onAdded`
- * after a successful add.
+ * fields (colormap/rescale/bands for COG only), and an Add button. Selecting a
+ * type pre-fills the matching example and applies its timeline/settings.
+ *
+ * @param controller - The control's UI-facing API
+ * @param onAdded - Called after a source is successfully added
+ * @param onConfigApplied - Called after an example's timeline/settings are
+ *   applied, so other sections can re-read control state
  */
-function buildForm(controller: DockController, onAdded: () => void): HTMLElement {
+function buildForm(
+  controller: DockController,
+  onAdded: () => void,
+  onConfigApplied: () => void
+): HTMLElement {
   const form = document.createElement('div');
   form.className = 'ts-add-form';
 
@@ -552,17 +772,27 @@ function buildForm(controller: DockController, onAdded: () => void): HTMLElement
   rescaleInputs.append(rescaleMin, rescaleMax);
   rescaleRow.append(rescaleSpan, rescaleInputs);
   const nodataField = field('NoData', 'nan or number');
+  // Comma-separated 1-based band indexes, e.g. "1,2,3" for an RGB composite.
+  const bandsField = field('Bands (optional)', 'e.g. 1,2,3');
 
   const tilesField = field('Tile URL', 'https://.../{z}/{x}/{y}.png?d={YYYY}-{MM}-{DD}');
   const dataField = field('GeoJSON URL', 'https://.../data.geojson');
   const timePropField = field('Time property', 'time');
+  // Time window: features are kept for `[date, date + 1 unit)`. Defaults to the
+  // granularity so features match the active timeline step (a day window with a
+  // monthly timeline would show almost nothing).
+  const windowField = selectField(
+    'Time window',
+    GRANULARITIES.map((g) => ({ value: g, label: g[0].toUpperCase() + g.slice(1) }))
+  );
+  windowField.select.value = 'day';
   const baseUrlField = field('WMS base URL', 'https://.../wms?service=WMS');
   const wmsLayersField = field('WMS layers', 'layer-name');
 
   const groups: Record<SourceSpec['type'], HTMLElement[]> = {
-    cog: [urlField.row, cmapRow, rescaleRow, nodataField.row],
+    cog: [urlField.row, cmapRow, rescaleRow, nodataField.row, bandsField.row],
     xyz: [tilesField.row],
-    geojson: [dataField.row, timePropField.row],
+    geojson: [dataField.row, timePropField.row, windowField.row],
     wms: [baseUrlField.row, wmsLayersField.row],
     custom: [],
   };
@@ -570,14 +800,56 @@ function buildForm(controller: DockController, onAdded: () => void): HTMLElement
   const fieldHost = document.createElement('div');
   fieldHost.className = 'ts-form-fields';
 
-  const renderFields = (): void => {
-    fieldHost.replaceChildren(
-      nameField.row,
-      idField.row,
-      ...groups[typeSelect.value as SourceSpec['type']]
-    );
+  // Pre-fill the example field values for the selected type, but only when the
+  // primary URL field is still empty so a user's own input is never overwritten
+  // when they switch types back and forth.
+  const applyExampleFields = (type: SourceSpec['type']): void => {
+    if (type === 'cog' && !urlField.input.value) {
+      const f = EXAMPLES.cog.fields;
+      urlField.input.value = f.url;
+      cmapSelect.value = f.colormap;
+      rescaleMin.value = f.rescaleMin;
+      rescaleMax.value = f.rescaleMax;
+      nodataField.input.value = f.nodata;
+      bandsField.input.value = f.bands;
+    } else if (type === 'xyz' && !tilesField.input.value) {
+      tilesField.input.value = EXAMPLES.xyz.fields.tiles;
+    } else if (type === 'geojson' && !dataField.input.value) {
+      const f = EXAMPLES.geojson.fields;
+      dataField.input.value = f.data;
+      timePropField.input.value = f.timeProperty;
+      windowField.select.value = f.window;
+    } else if (type === 'wms' && !baseUrlField.input.value) {
+      const f = EXAMPLES.wms.fields;
+      baseUrlField.input.value = f.baseUrl;
+      wmsLayersField.input.value = f.layers;
+    }
   };
-  typeSelect.addEventListener('change', renderFields);
+
+  // Apply the example's timeline + settings to the control. Only triggered by an
+  // explicit type change (not the initial render), so it never clobbers the
+  // host page's own configuration when the panel first opens.
+  const applyExampleConfig = (type: SourceSpec['type']): void => {
+    if (type === 'custom') return;
+    const t = EXAMPLES[type].timeline;
+    controller.setGranularities(t.granularities);
+    controller.setRange(t.startDate, t.endDate, 1, t.granularity);
+    controller.setSpeed(t.speed);
+    // Start every example at its start date rather than wherever the previous
+    // current date happens to snap to within the new range.
+    controller.goTo(new Date(t.startDate));
+    onConfigApplied();
+  };
+
+  const renderFields = (): void => {
+    const type = typeSelect.value as SourceSpec['type'];
+    applyExampleFields(type);
+    fieldHost.replaceChildren(nameField.row, idField.row, ...groups[type]);
+  };
+  typeSelect.addEventListener('change', () => {
+    renderFields();
+    applyExampleConfig(typeSelect.value as SourceSpec['type']);
+  });
   renderFields();
 
   const readRescale = (): [number, number] | undefined => {
@@ -586,11 +858,20 @@ function buildForm(controller: DockController, onAdded: () => void): HTMLElement
     return !Number.isNaN(lo) && !Number.isNaN(hi) ? [lo, hi] : undefined;
   };
 
+  // Parse the comma-separated band field into 1-based indexes (e.g. "1,2,3").
+  const readBands = (): number[] | undefined => {
+    const bands = bandsField.input.value
+      .split(',')
+      .map((b) => parseInt(b.trim(), 10))
+      .filter((b) => Number.isInteger(b) && b > 0);
+    return bands.length > 0 ? bands : undefined;
+  };
+
   const addBtn = document.createElement('button');
   addBtn.type = 'button';
   addBtn.className = 'time-slider-btn ts-add-submit';
   addBtn.textContent = 'Add layer';
-  addBtn.addEventListener('click', () => {
+  addBtn.addEventListener('click', async () => {
     const type = typeSelect.value as SourceSpec['type'];
     const name = nameField.input.value || undefined;
     const id = idField.input.value || undefined;
@@ -604,6 +885,7 @@ function buildForm(controller: DockController, onAdded: () => void): HTMLElement
         colormap: cmapSelect.value || undefined,
         rescale: readRescale(),
         nodata: nodataField.input.value || undefined,
+        bidx: readBands(),
       };
     } else if (type === 'xyz' && tilesField.input.value) {
       spec = { type: 'xyz', id, name, tiles: tilesField.input.value };
@@ -614,6 +896,7 @@ function buildForm(controller: DockController, onAdded: () => void): HTMLElement
         name,
         data: dataField.input.value,
         timeProperty: timePropField.input.value || 'time',
+        window: { unit: windowField.select.value as Granularity, before: 0, after: 1 },
       };
     } else if (type === 'wms' && baseUrlField.input.value) {
       spec = {
@@ -625,6 +908,27 @@ function buildForm(controller: DockController, onAdded: () => void): HTMLElement
       };
     }
     if (!spec) return;
+
+    // For COG, fetch the data footprint from TiTiler so MapLibre only requests
+    // tiles inside the COG (out-of-bounds tiles 404 and flood the console). The
+    // URL is resolved for the current date; failures are non-fatal.
+    if (spec.type === 'cog') {
+      const resolved = resolveUrl(spec.url, controller.getState().currentDate);
+      const cogUrl = resolved instanceof Promise ? await resolved.catch(() => undefined) : resolved;
+      if (cogUrl) {
+        addBtn.disabled = true;
+        addBtn.textContent = 'Loading...';
+        try {
+          spec.bounds = await getTiTilerBounds(cogUrl, spec.endpoint);
+        } catch {
+          // Add without bounds if the footprint cannot be determined.
+        } finally {
+          addBtn.disabled = false;
+          addBtn.textContent = 'Add layer';
+        }
+      }
+    }
+
     controller.addSource(spec);
     // Reset the form inputs.
     [
@@ -632,6 +936,7 @@ function buildForm(controller: DockController, onAdded: () => void): HTMLElement
       idField,
       urlField,
       nodataField,
+      bandsField,
       tilesField,
       dataField,
       timePropField,
@@ -640,7 +945,8 @@ function buildForm(controller: DockController, onAdded: () => void): HTMLElement
     ].forEach((f) => (f.input.value = ''));
     rescaleMin.value = '';
     rescaleMax.value = '';
-    cmapSelect.value = 'viridis';
+    cmapSelect.value = '';
+    windowField.select.value = 'day';
     onAdded();
   });
 

@@ -194,6 +194,23 @@ describe('TimeSliderControl sources', () => {
     control.setSourceOpacity('x', 0.3);
     expect(stub.map.setPaintProperty).toHaveBeenCalledWith('x', 'raster-opacity', 0.3);
   });
+
+  it('toggles source visibility via setSourceProperty', () => {
+    const { control, stub } = mount({
+      sources: [{ type: 'xyz', id: 'x', tiles: 'https://t/{z}/{x}/{y}.png' }],
+    });
+    control.setSourceProperty('x', { visible: false });
+    expect(stub.map.setLayoutProperty).toHaveBeenCalledWith('x', 'visibility', 'none');
+  });
+
+  it('auto-plays when a layer is added live and autoPlay is enabled', () => {
+    const { control } = mount();
+    control.setAutoPlay(true);
+    expect(control.getState().isPlaying).toBe(false);
+    control.addSource({ type: 'xyz', id: 'x', tiles: 'https://t/{z}/{x}/{y}.png' });
+    expect(control.getState().isPlaying).toBe(true);
+    control.pause();
+  });
 });
 
 describe('TimeSliderControl config', () => {

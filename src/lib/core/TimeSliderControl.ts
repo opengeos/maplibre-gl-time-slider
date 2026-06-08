@@ -653,9 +653,18 @@ export class TimeSliderControl implements IControl, DockController {
       beforeId: this._options.beforeId,
     });
     this._adapters.push(adapter);
-    void Promise.resolve(adapter.add(this._state.currentDate)).catch(() => undefined);
+    void Promise.resolve(adapter.add(this._state.currentDate))
+      .then(() => {
+        // The layer only exists after `add` resolves, so apply an initial
+        // hidden state here rather than at construction time.
+        if (spec.visible === false) adapter.setVisible(false);
+      })
+      .catch(() => undefined);
     this._view?.refreshLayers();
     this._emit('sourceadd');
+    // "Auto-play on load" should also kick in when a layer is added live (the
+    // constructor-time autoplay in onAdd has already passed by then).
+    if (this._options.autoPlay && !this._state.isPlaying) this.play();
     return adapter.id;
   }
 
@@ -702,6 +711,10 @@ export class TimeSliderControl implements IControl, DockController {
     if ('opacity' in rest && typeof rest.opacity === 'number') {
       adapter.setOpacity(rest.opacity);
       delete rest.opacity;
+    }
+    if ('visible' in rest && typeof rest.visible === 'boolean') {
+      adapter.setVisible(rest.visible);
+      delete rest.visible;
     }
     if (Object.keys(rest).length > 0 && adapter.setProperty) {
       void Promise.resolve(adapter.setProperty(rest as Partial<SourceSpec>)).catch(() => undefined);
@@ -771,7 +784,12 @@ export class TimeSliderControl implements IControl, DockController {
       for (const spec of config.sources) {
         const adapter = createAdapter(spec, { map: this._map, beforeId: this._options.beforeId });
         this._adapters.push(adapter);
-        void Promise.resolve(adapter.add(s.currentDate)).catch(() => undefined);
+        void Promise.resolve(adapter.add(s.currentDate))
+          .then(() => {
+            // Mirror addSource: apply an initial hidden state once the layer exists.
+            if (spec.visible === false) adapter.setVisible(false);
+          })
+          .catch(() => undefined);
       }
     } else {
       this._options.sources = [...config.sources];

@@ -1,4 +1,9 @@
-import type { FilterSpecification } from 'maplibre-gl';
+import type {
+  CircleLayerSpecification,
+  FillLayerSpecification,
+  FilterSpecification,
+  LineLayerSpecification,
+} from 'maplibre-gl';
 import type { GeoJsonSourceSpec, GeoJsonTimeWindow } from '../core/types';
 import { addUnits } from '../time/granularity';
 import { clamp } from '../utils/helpers';
@@ -18,6 +23,27 @@ const GEOMETRY_CONFIG = {
   circle: { layerType: 'circle' as const, opacityKey: 'circle-opacity' },
   fill: { layerType: 'fill' as const, opacityKey: 'fill-opacity' },
   line: { layerType: 'line' as const, opacityKey: 'line-opacity' },
+};
+
+/**
+ * Visible default paint per geometry, used when a spec provides none. MapLibre's
+ * built-in defaults (tiny black fills) are easy to miss, so these give an
+ * unstyled layer a sensible, clearly visible appearance. User-supplied paint
+ * always overrides these.
+ */
+const DEFAULT_PAINT: {
+  circle: CircleLayerSpecification['paint'];
+  fill: FillLayerSpecification['paint'];
+  line: LineLayerSpecification['paint'];
+} = {
+  circle: {
+    'circle-radius': 6,
+    'circle-color': '#ff5533',
+    'circle-stroke-color': '#ffffff',
+    'circle-stroke-width': 1,
+  },
+  fill: { 'fill-color': '#3388ff' },
+  line: { 'line-color': '#3388ff', 'line-width': 2 },
 };
 
 /**
@@ -75,6 +101,7 @@ export class GeoJsonAdapter extends BaseAdapter {
     const geometry = this.spec.geometry ?? 'circle';
     const { layerType } = GEOMETRY_CONFIG[geometry];
     const paint = {
+      ...DEFAULT_PAINT[geometry],
       ...(this.spec.paint?.[geometry] ?? {}),
       [this.opacityKey]: this.opacity,
     };

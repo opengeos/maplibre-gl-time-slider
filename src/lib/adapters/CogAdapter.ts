@@ -20,6 +20,7 @@ export class CogAdapter extends RasterAdapter {
     super(spec.id!, { ...ctx, beforeId: spec.beforeId ?? ctx.beforeId }, spec.opacity ?? 1);
     this.spec = spec;
     this.tileSize = spec.tileSize ?? 256;
+    this.bounds = spec.bounds;
   }
 
   protected resolveTiles(date: Date): string | Promise<string> {

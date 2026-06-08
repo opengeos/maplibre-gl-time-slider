@@ -75,6 +75,31 @@ describe('XyzAdapter', () => {
     adapter.setOpacity(0.4);
     expect(map.setPaintProperty).toHaveBeenCalledWith('x2', 'raster-opacity', 0.4);
   });
+
+  it('passes bounds to the raster source when provided', async () => {
+    const { map } = createStubMap();
+    const bounds: [number, number, number, number] = [-74.7, -8.6, -74.2, -8.3];
+    const adapter = new XyzAdapter(
+      { type: 'xyz', id: 'xb', tiles: 'https://t/{z}/{x}/{y}.png', bounds },
+      { map }
+    );
+    await adapter.add(d1);
+    const srcArg = (map.addSource as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    expect(srcArg.bounds).toEqual(bounds);
+  });
+
+  it('toggles layer visibility via the visibility layout property', async () => {
+    const { map } = createStubMap();
+    const adapter = new XyzAdapter(
+      { type: 'xyz', id: 'x3', tiles: 'https://t/{z}/{x}/{y}.png' },
+      { map }
+    );
+    await adapter.add(d1);
+    adapter.setVisible(false);
+    expect(map.setLayoutProperty).toHaveBeenCalledWith('x3', 'visibility', 'none');
+    adapter.setVisible(true);
+    expect(map.setLayoutProperty).toHaveBeenCalledWith('x3', 'visibility', 'visible');
+  });
 });
 
 describe('WmsAdapter', () => {
@@ -136,6 +161,36 @@ describe('GeoJsonAdapter', () => {
 
     adapter.update(d2);
     expect(map.setFilter).toHaveBeenCalledWith('g1', buildTimeFilter('time', d2, { unit: 'day' }));
+  });
+
+  it('applies a visible default circle style when no paint is given', () => {
+    const { map } = createStubMap();
+    const adapter = new GeoJsonAdapter(
+      { type: 'geojson', id: 'g2', data: 'https://x.geojson', timeProperty: 'time' },
+      { map }
+    );
+    adapter.add(d1);
+    const layerArg = (map.addLayer as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(layerArg.paint['circle-radius']).toBe(6);
+    expect(layerArg.paint['circle-color']).toBe('#ff5533');
+    expect(layerArg.paint['circle-opacity']).toBe(1);
+  });
+
+  it('lets a spec override the default paint', () => {
+    const { map } = createStubMap();
+    const adapter = new GeoJsonAdapter(
+      {
+        type: 'geojson',
+        id: 'g3',
+        data: 'https://x.geojson',
+        timeProperty: 'time',
+        paint: { circle: { 'circle-color': '#000' } },
+      },
+      { map }
+    );
+    adapter.add(d1);
+    const layerArg = (map.addLayer as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(layerArg.paint['circle-color']).toBe('#000');
   });
 });
 

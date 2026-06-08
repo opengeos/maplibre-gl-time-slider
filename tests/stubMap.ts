@@ -45,6 +45,7 @@ export function createStubMap(): StubMap {
       layers.delete(id);
     }),
     setPaintProperty: vi.fn(),
+    setLayoutProperty: vi.fn(),
     setFilter: vi.fn(),
     getContainer: vi.fn(() => container),
     resize: vi.fn(),
