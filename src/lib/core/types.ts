@@ -267,9 +267,13 @@ export interface TimeSliderOptions {
   startDate: Date | string;
 
   /**
-   * Inclusive end of the timeline range.
+   * Inclusive end of the timeline range. When omitted, defaults to the current
+   * date so the timeline always reaches the latest available data. An end that
+   * is defaulted this way is treated as "open": {@link TimeSliderControl.getConfig}
+   * omits it, so a persisted config re-resolves to the then-current date on load.
+   * @default the current date
    */
-  endDate: Date | string;
+  endDate?: Date | string;
 
   /**
    * Number of {@link granularity} units between consecutive steps.
@@ -386,6 +390,14 @@ export interface TimeSliderState {
   endDate: Date;
 
   /**
+   * Whether {@link endDate} was defaulted to the current date because no end was
+   * specified (rather than set explicitly). When true the end is treated as
+   * "open": it is omitted from {@link TimeSliderControl.getConfig} so a persisted
+   * config re-resolves to the then-current date on load.
+   */
+  endDateAuto: boolean;
+
+  /**
    * Steps between marker positions, in granularity units.
    */
   interval: number;
@@ -422,7 +434,12 @@ export interface TimeSliderState {
  */
 export interface TimeSliderConfig {
   startDate: string;
-  endDate: string;
+  /**
+   * Inclusive end of the range. Omitted when the end is "open" (defaulted to the
+   * current date because none was specified), so a restored config re-resolves
+   * the end to the then-current date instead of pinning it to the save time.
+   */
+  endDate?: string;
   interval: number;
   granularity: Granularity;
   currentDate: string;
