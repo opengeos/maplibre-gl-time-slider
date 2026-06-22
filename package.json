@@ -1,6 +1,6 @@
 {
   "name": "maplibre-gl-time-slider",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "description": "A MapLibre GL JS plugin for visualizing time series raster and vector data with a NASA-Worldview-style bottom-docked timeline",
   "type": "module",
   "main": "./dist/index.cjs",
