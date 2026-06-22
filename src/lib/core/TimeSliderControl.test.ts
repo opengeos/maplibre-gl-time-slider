@@ -213,6 +213,75 @@ describe('TimeSliderControl sources', () => {
   });
 });
 
+describe('TimeSliderControl open-ended end date', () => {
+  it('defaults an omitted end date to the current date (auto)', () => {
+    const before = Date.now();
+    const control = new TimeSliderControl({
+      startDate: '2024-04-18T00:00:00Z',
+      granularity: 'day',
+    });
+    const after = Date.now();
+    const state = control.getState();
+    expect(state.endDateAuto).toBe(true);
+    expect(state.endDate.getTime()).toBeGreaterThanOrEqual(before);
+    expect(state.endDate.getTime()).toBeLessThanOrEqual(after);
+  });
+
+  it('keeps an explicit end date fixed (not auto)', () => {
+    const control = new TimeSliderControl({ ...BASE });
+    expect(control.getState().endDateAuto).toBe(false);
+    expect(iso(control.getState().endDate)).toBe('2024-04-22T00:00:00.000Z');
+  });
+
+  it('omits an auto end date from getConfig and re-resolves it on setConfig', () => {
+    const control = new TimeSliderControl({
+      startDate: '2024-04-18T00:00:00Z',
+      granularity: 'day',
+    });
+    const config = control.getConfig();
+    expect('endDate' in config).toBe(false);
+
+    // A round-trip (simulating reopening a saved project later) re-resolves the
+    // end to "now" rather than pinning it to the original save time.
+    const before = Date.now();
+    const fresh = new TimeSliderControl({ ...BASE });
+    fresh.setConfig(config);
+    const after = Date.now();
+    expect(fresh.getState().endDateAuto).toBe(true);
+    expect(fresh.getState().endDate.getTime()).toBeGreaterThanOrEqual(before);
+    expect(fresh.getState().endDate.getTime()).toBeLessThanOrEqual(after);
+  });
+
+  it('serializes an explicit end date in getConfig', () => {
+    const control = new TimeSliderControl({ ...BASE });
+    expect(control.getConfig().endDate).toBe('2024-04-22T00:00:00.000Z');
+  });
+
+  it('setRange with a null end opens the range (auto = current date)', () => {
+    const before = Date.now();
+    const control = new TimeSliderControl({ ...BASE });
+    expect(control.getState().endDateAuto).toBe(false);
+    control.setRange('2024-05-01T00:00:00Z', null);
+    const after = Date.now();
+    const state = control.getState();
+    expect(state.endDateAuto).toBe(true);
+    expect(state.endDate.getTime()).toBeGreaterThanOrEqual(before);
+    expect(state.endDate.getTime()).toBeLessThanOrEqual(after);
+    expect('endDate' in control.getConfig()).toBe(false);
+  });
+
+  it('setRange with an explicit end closes the range again', () => {
+    const control = new TimeSliderControl({
+      startDate: '2024-04-18T00:00:00Z',
+      granularity: 'day',
+    });
+    expect(control.getState().endDateAuto).toBe(true);
+    control.setRange('2024-05-01T00:00:00Z', '2024-05-10T00:00:00Z');
+    expect(control.getState().endDateAuto).toBe(false);
+    expect(iso(control.getState().endDate)).toBe('2024-05-10T00:00:00.000Z');
+  });
+});
+
 describe('TimeSliderControl config', () => {
   it('round-trips getConfig / setConfig', () => {
     const { control } = mount({

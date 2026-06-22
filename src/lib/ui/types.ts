@@ -42,10 +42,14 @@ export interface DockController {
   setGranularity(granularity: Granularity): void;
   /** Set which granularities are offered as pills. */
   setGranularities(granularities: Granularity[]): void;
-  /** Update the timeline range (and optionally interval/granularity). */
+  /**
+   * Update the timeline range (and optionally interval/granularity). Pass `null`
+   * (or omit) for `end` to leave it open: it defaults to the current date and is
+   * persisted as auto so a restored config re-resolves to the then-current date.
+   */
   setRange(
     start: Date | string,
-    end: Date | string,
+    end?: Date | string | null,
     interval?: number,
     granularity?: Granularity
   ): void;

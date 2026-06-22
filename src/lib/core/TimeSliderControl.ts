@@ -77,7 +77,11 @@ export class TimeSliderControl implements IControl, DockController {
    */
   constructor(options: TimeSliderOptions) {
     const startDate = toDate(options.startDate);
-    const endDate = toDate(options.endDate);
+    // An omitted end date is "open": default it to now so the timeline always
+    // reaches the latest data, and remember it was auto so getConfig() leaves it
+    // out and a restored config re-resolves to the then-current date.
+    const endDateAuto = options.endDate == null;
+    const endDate = options.endDate == null ? new Date() : toDate(options.endDate);
     const interval = Math.max(1, Math.floor(options.interval ?? 1));
     const granularity = options.granularity ?? 'day';
     const initial = options.initialDate ? toDate(options.initialDate) : startDate;
@@ -86,6 +90,7 @@ export class TimeSliderControl implements IControl, DockController {
       collapsed: options.collapsed ?? false,
       startDate,
       endDate,
+      endDateAuto,
       interval,
       granularity,
       currentDate: snapToStep(initial, startDate, endDate, interval, granularity),
@@ -655,20 +660,23 @@ export class TimeSliderControl implements IControl, DockController {
    * re-snapping the current date.
    *
    * @param start - New range start
-   * @param end - New range end
+   * @param end - New range end. Pass `null` (or omit) to leave the end "open":
+   *   it defaults to the current date and is treated as auto, so it re-resolves
+   *   to the then-current date when a persisted config is restored.
    * @param interval - Optional new interval
    * @param granularity - Optional new granularity
    */
   setRange(
     start: Date | string,
-    end: Date | string,
+    end?: Date | string | null,
     interval?: number,
     granularity?: Granularity
   ): void {
     const s = this._state;
     const prev = s.currentDate.getTime();
     s.startDate = toDate(start);
-    s.endDate = toDate(end);
+    s.endDateAuto = end == null;
+    s.endDate = end == null ? new Date() : toDate(end);
     if (interval != null) s.interval = Math.max(1, Math.floor(interval));
     if (granularity != null) s.granularity = granularity;
     s.currentDate = snapToStep(s.currentDate, s.startDate, s.endDate, s.interval, s.granularity);
@@ -786,7 +794,9 @@ export class TimeSliderControl implements IControl, DockController {
     const s = this._state;
     return {
       startDate: s.startDate.toISOString(),
-      endDate: s.endDate.toISOString(),
+      // Omit an auto (open) end so a restored config re-resolves it to the
+      // then-current date rather than pinning it to this save time.
+      ...(s.endDateAuto ? {} : { endDate: s.endDate.toISOString() }),
       interval: s.interval,
       granularity: s.granularity,
       granularities: [...this._options.granularities],
@@ -817,7 +827,10 @@ export class TimeSliderControl implements IControl, DockController {
 
     const s = this._state;
     s.startDate = toDate(config.startDate);
-    s.endDate = toDate(config.endDate);
+    // A missing end date means the saved range was open: re-resolve it to the
+    // current date so reopening an old project still reaches the latest data.
+    s.endDateAuto = config.endDate == null;
+    s.endDate = config.endDate == null ? new Date() : toDate(config.endDate);
     s.interval = Math.max(1, Math.floor(config.interval));
     s.granularity = config.granularity;
     s.currentDate = snapToStep(

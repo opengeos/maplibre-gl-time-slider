@@ -437,6 +437,8 @@ function buildTimelineSection(controller: DockController): {
   fields.className = 'ts-form-fields';
   const start = field('Start date', '', 'date');
   const end = field('End date', '', 'date');
+  // A blank end date tracks today, so the timeline always reaches the latest data.
+  end.input.title = 'Leave blank to track the current date (always shows the latest data)';
   const interval = field('Interval', '', 'number');
   interval.input.min = '1';
   const initial = field('Initial date', '', 'date');
@@ -445,10 +447,13 @@ function buildTimelineSection(controller: DockController): {
   section.append(title, fields);
 
   const apply = (): void => {
-    if (!start.input.value || !end.input.value) return;
+    if (!start.input.value) return;
     const startDate = new Date(start.input.value);
-    const endDate = new Date(end.input.value);
-    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return;
+    if (Number.isNaN(startDate.getTime())) return;
+    // A blank End date leaves the range open: it defaults to today and stays
+    // auto, so the saved project re-resolves to the current date on reload.
+    const endDate = end.input.value ? new Date(end.input.value) : null;
+    if (endDate && Number.isNaN(endDate.getTime())) return;
     const step = parseInt(interval.input.value, 10);
     controller.setRange(startDate, endDate, Number.isNaN(step) ? undefined : step);
   };
@@ -464,7 +469,9 @@ function buildTimelineSection(controller: DockController): {
   const sync = (): void => {
     const state = controller.getState();
     start.input.value = formatDate(state.startDate, 'YYYY-MM-DD');
-    end.input.value = formatDate(state.endDate, 'YYYY-MM-DD');
+    // Leave End blank when the range is open so editing Start keeps it open
+    // rather than silently pinning the end to today's resolved value.
+    end.input.value = state.endDateAuto ? '' : formatDate(state.endDate, 'YYYY-MM-DD');
     interval.input.value = String(state.interval);
     initial.input.value = formatDate(state.currentDate, 'YYYY-MM-DD');
   };

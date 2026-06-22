@@ -212,7 +212,7 @@ Main control class implementing MapLibre's `IControl` interface.
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `startDate` | `Date \| string` | - | Inclusive range start (required) |
-| `endDate` | `Date \| string` | - | Inclusive range end (required) |
+| `endDate` | `Date \| string` | current date | Inclusive range end. Omit it to leave the range open: it defaults to the current date, and a persisted config (`getConfig`) leaves it out so a restored timeline re-resolves to the then-current date and always reaches the latest data |
 | `interval` | `number` | `1` | Steps between marker positions, in granularity units |
 | `granularity` | `'hour' \| 'day' \| 'month' \| 'year'` | `'day'` | Active granularity |
 | `granularities` | `Granularity[]` | all four | Granularities offered as zoom pills |

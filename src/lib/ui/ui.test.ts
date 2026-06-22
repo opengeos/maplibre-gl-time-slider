@@ -8,6 +8,7 @@ const STATE: TimeSliderState = {
   collapsed: false,
   startDate: new Date('2024-04-18T00:00:00Z'),
   endDate: new Date('2024-04-22T00:00:00Z'),
+  endDateAuto: false,
   currentDate: new Date('2024-04-18T00:00:00Z'),
   interval: 1,
   granularity: 'day',
@@ -169,6 +170,54 @@ describe('layersPopover', () => {
   it('shows an empty state when there are no layers', () => {
     const popover = createLayersPopover(baseController());
     expect(popover.root.querySelector('.ts-layer-empty')).not.toBeNull();
+    popover.destroy();
+  });
+
+  const timelineInputs = (root: HTMLElement): HTMLInputElement[] =>
+    Array.from(
+      root.querySelectorAll('.ts-timeline-section .ts-form-fields .ts-field input')
+    ) as HTMLInputElement[];
+
+  it('Timeline form: a blank End date opens the range (setRange end = null)', () => {
+    const setRange = vi.fn();
+    const popover = createLayersPopover(baseController({ setRange }));
+    document.body.appendChild(popover.root);
+
+    const [start, end] = timelineInputs(popover.root);
+    start.value = '2024-01-01';
+    end.value = '';
+    start.dispatchEvent(new Event('change'));
+
+    expect(setRange).toHaveBeenCalledTimes(1);
+    const [, endArg] = setRange.mock.calls[0];
+    expect(endArg).toBeNull();
+    popover.destroy();
+  });
+
+  it('Timeline form: an explicit End date sets a fixed range', () => {
+    const setRange = vi.fn();
+    const popover = createLayersPopover(baseController({ setRange }));
+    document.body.appendChild(popover.root);
+
+    const [start, end] = timelineInputs(popover.root);
+    start.value = '2024-01-01';
+    end.value = '2024-06-30';
+    end.dispatchEvent(new Event('change'));
+
+    expect(setRange).toHaveBeenCalledTimes(1);
+    const endArg = setRange.mock.calls[0][1] as Date;
+    expect(endArg).toBeInstanceOf(Date);
+    expect(endArg.getTime()).toBe(new Date('2024-06-30').getTime());
+    popover.destroy();
+  });
+
+  it('Timeline form: leaves End blank when the range end is auto', () => {
+    const popover = createLayersPopover(
+      baseController({ getState: () => ({ ...STATE, endDateAuto: true }) })
+    );
+    document.body.appendChild(popover.root);
+    const [, end] = timelineInputs(popover.root);
+    expect(end.value).toBe('');
     popover.destroy();
   });
 
