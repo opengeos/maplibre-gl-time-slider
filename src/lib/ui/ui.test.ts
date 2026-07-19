@@ -54,6 +54,9 @@ afterEach(() => {
   // Restore prototype spies (e.g. getBoundingClientRect) so a mock from one
   // test cannot leak into the next.
   vi.restoreAllMocks();
+  // Several tests mount their popover into the document to exercise real event
+  // dispatch; drop the mounted nodes so one test's DOM cannot reach the next.
+  document.body.replaceChildren();
 });
 
 describe('axisRenderer', () => {
@@ -163,6 +166,24 @@ describe('layersPopover', () => {
 
     (popover.root.querySelector('.ts-layer-remove') as HTMLButtonElement).click();
     expect(removeSource).toHaveBeenCalledWith('new');
+
+    popover.destroy();
+  });
+
+  it('stays open on outside clicks; only "+ Add data" toggles it shut', () => {
+    const popover = createLayersPopover(baseController());
+    document.body.appendChild(popover.root);
+    const toggle = popover.root.querySelector('.ts-add-data') as HTMLButtonElement;
+
+    toggle.click();
+    expect(popover.root.classList.contains('ts-open')).toBe(true);
+
+    // A click on the map (or anywhere else in the document) must not dismiss it.
+    document.body.click();
+    expect(popover.root.classList.contains('ts-open')).toBe(true);
+
+    toggle.click();
+    expect(popover.root.classList.contains('ts-open')).toBe(false);
 
     popover.destroy();
   });
