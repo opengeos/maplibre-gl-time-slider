@@ -16,6 +16,7 @@ A MapLibre GL JS plugin for visualizing time series raster and vector data with 
 - Scrubbable, zoomable axis with a draggable marker and play / pause / loop / speed controls
 - The plugin **manages map layers for you** through built-in data adapters:
   - **COG** via TiTiler (colormap + rescale)
+  - **Mosaic** (STAC / MosaicJSON) — a per-date `.json` of many COGs stitched into one deck.gl mosaic (via the optional `maplibre-gl-raster` peer)
   - **XYZ / WMTS** raster tiles
   - **WMS-Time** (OGC `TIME` parameter)
   - **GeoJSON** filtered by a time property
@@ -149,6 +150,44 @@ which avoids 404 floods from tile servers that error on out-of-bounds tiles.
   bounds: [-74.7, -8.6, -74.2, -8.3], // optional data footprint
 }
 ```
+
+### Mosaic (STAC / MosaicJSON)
+
+Steps through a series of **mosaic manifests** — one `.json` per date — each a
+[MosaicJSON](https://github.com/developmentseed/mosaicjson-spec) or a STAC
+`FeatureCollection` listing many COGs. Every date's manifest is rendered as a
+single stitched deck.gl mosaic, so each timeline step is a full spatial mosaic
+(e.g. a monthly Sentinel-2 composite). This is the counterpart to `cog` for when
+each date is a *collection* of images rather than one COG.
+
+```typescript
+{
+  type: 'mosaic',
+  url: 'https://example.com/{date:YYYY}/{date:MM}/mosaic.json', // or (date) => url
+  colormap: 'viridis',     // single-band mosaics only; omit for RGB imagery
+  rescale: [0, 3000],      // applied per channel (needs bidx or a colormap)
+  bidx: [1, 2, 3],         // band indexes; 3+ = RGB, 1 = single-band
+  opacity: 0.9,
+}
+```
+
+Rendering is delegated to
+[`maplibre-gl-raster`](https://github.com/opengeos/maplibre-gl-raster) (an
+**optional peer dependency**), imported lazily the first time a mosaic source is
+added, so the deck.gl engine never enters the base bundle. Install it alongside
+its deck.gl / luma.gl peers to use this source type:
+
+```bash
+npm install maplibre-gl-raster @deck.gl/core @deck.gl/geo-layers @deck.gl/layers @deck.gl/mapbox @deck.gl/mesh-layers @luma.gl/core @luma.gl/shadertools
+```
+
+The first mosaic added fits the view to its extent; later date steps swap the
+manifest in place without moving the map. Adding a mosaic **switches the map to a
+mercator projection** — the deck.gl tiler cannot render in MapLibre's globe view,
+so a mosaic would otherwise draw nothing there. Each COG the manifest references
+must be CORS-enabled and reachable from the browser (see the `maplibre-gl-raster`
+docs for the mosaic manifest formats and the `make_stac.py` / `search_stac.py`
+helpers that build them).
 
 ### XYZ / WMTS raster
 

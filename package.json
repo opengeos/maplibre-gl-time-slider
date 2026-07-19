@@ -1,6 +1,6 @@
 {
   "name": "maplibre-gl-time-slider",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "A MapLibre GL JS plugin for visualizing time series raster and vector data with a NASA-Worldview-style bottom-docked timeline",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -77,10 +77,14 @@
   "homepage": "https://github.com/opengeos/maplibre-gl-time-slider#readme",
   "peerDependencies": {
     "maplibre-gl": ">=5.14.0",
+    "maplibre-gl-raster": ">=0.12.0",
     "react": ">=18.0.0",
     "react-dom": ">=18.0.0"
   },
   "peerDependenciesMeta": {
+    "maplibre-gl-raster": {
+      "optional": true
+    },
     "react": {
       "optional": true
     },
@@ -102,6 +106,7 @@
     "eslint": "^10.4.0",
     "jsdom": "^29.1.0",
     "maplibre-gl": "^5.24.0",
+    "maplibre-gl-raster": "^0.12.0",
     "prettier": "^3.8.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

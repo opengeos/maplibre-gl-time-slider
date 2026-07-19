@@ -27,7 +27,9 @@ export default defineConfig({
       },
     },
     rollupOptions: {
-      external: ['react', 'react-dom', 'maplibre-gl'],
+      // `maplibre-gl-raster` is an optional peer, loaded lazily by the mosaic
+      // adapter's dynamic import; keep it external so it never enters the bundle.
+      external: ['react', 'react-dom', 'maplibre-gl', 'maplibre-gl-raster'],
       output: {
         globals: {
           react: 'React',

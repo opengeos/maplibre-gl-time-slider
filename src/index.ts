@@ -41,6 +41,7 @@ export type {
   SourceSpec,
   ResolvedSourceSpec,
   CogSourceSpec,
+  MosaicSourceSpec,
   XyzSourceSpec,
   WmsSourceSpec,
   GeoJsonSourceSpec,

@@ -21,6 +21,7 @@ export interface LayersHandle {
  */
 const SOURCE_TYPES: { value: SourceSpec['type']; label: string }[] = [
   { value: 'cog', label: 'COG (TiTiler)' },
+  { value: 'mosaic', label: 'Mosaic (STAC / MosaicJSON)' },
   { value: 'xyz', label: 'XYZ / WMTS' },
   { value: 'geojson', label: 'GeoJSON' },
   { value: 'wms', label: 'WMS-Time' },
@@ -96,6 +97,24 @@ const EXAMPLES: Record<Exclude<SourceSpec['type'], 'custom'>, Example> = {
       rescaleMax: '110',
       nodata: '0',
       bands: '1,2,3',
+    },
+  },
+  // Monthly Sentinel-2 mosaics (STAC FeatureCollections) over the French Alps,
+  // one .json per month, rendered as a deck.gl mosaic by maplibre-gl-raster.
+  mosaic: {
+    timeline: {
+      startDate: '2024-05-01',
+      endDate: '2024-09-01',
+      granularity: 'month',
+      granularities: ['month'],
+      speed: 1000,
+    },
+    fields: {
+      url: 'https://data.source.coop/giswqs/opengeos/s2_mosaic_ts/s2_{date:YYYY}_{date:MM}.json',
+      colormap: '',
+      rescaleMin: '',
+      rescaleMax: '',
+      bands: '',
     },
   },
   // NASA GIBS MODIS Terra True Color WMTS imagery (examples/worldview).
@@ -839,6 +858,8 @@ function buildForm(
 
   // Per-type fields.
   const urlField = field('COG URL', 'https://.../{date:YYYY-MM-DD}.tif');
+  // Mosaic manifest URL (MosaicJSON or STAC FeatureCollection), one per date.
+  const mosaicUrlField = field('Mosaic URL', 'https://.../{date:YYYY}/{date:MM}/mosaic.json');
   const cmapRow = document.createElement('label');
   cmapRow.className = 'ts-field';
   const cmapSpan = document.createElement('span');
@@ -879,6 +900,9 @@ function buildForm(
 
   const groups: Record<SourceSpec['type'], HTMLElement[]> = {
     cog: [urlField.row, cmapRow, rescaleRow, nodataField.row, bandsField.row],
+    // Shares the colormap/rescale/bands rows with COG (only one group is shown
+    // at a time, so re-parenting the same nodes is safe); no TiTiler NoData.
+    mosaic: [mosaicUrlField.row, cmapRow, rescaleRow, bandsField.row],
     xyz: [tilesField.row],
     geojson: [dataField.row, timePropField.row, windowField.row],
     wms: [baseUrlField.row, wmsLayersField.row],
@@ -899,6 +923,13 @@ function buildForm(
       rescaleMin.value = f.rescaleMin;
       rescaleMax.value = f.rescaleMax;
       nodataField.input.value = f.nodata;
+      bandsField.input.value = f.bands;
+    } else if (type === 'mosaic' && !mosaicUrlField.input.value) {
+      const f = EXAMPLES.mosaic.fields;
+      mosaicUrlField.input.value = f.url;
+      cmapSelect.value = f.colormap;
+      rescaleMin.value = f.rescaleMin;
+      rescaleMax.value = f.rescaleMax;
       bandsField.input.value = f.bands;
     } else if (type === 'xyz' && !tilesField.input.value) {
       tilesField.input.value = EXAMPLES.xyz.fields.tiles;
@@ -973,6 +1004,16 @@ function buildForm(
         colormap: cmapSelect.value || undefined,
         rescale: readRescale(),
         nodata: nodataField.input.value || undefined,
+        bidx: readBands(),
+      };
+    } else if (type === 'mosaic' && mosaicUrlField.input.value) {
+      spec = {
+        type: 'mosaic',
+        id,
+        name,
+        url: mosaicUrlField.input.value,
+        colormap: cmapSelect.value || undefined,
+        rescale: readRescale(),
         bidx: readBands(),
       };
     } else if (type === 'xyz' && tilesField.input.value) {

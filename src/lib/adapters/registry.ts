@@ -2,6 +2,7 @@ import type { CustomSourceSpec, ResolvedSourceSpec, SourceSpec } from '../core/t
 import { clamp, generateId } from '../utils/helpers';
 import { BaseAdapter } from './BaseAdapter';
 import { CogAdapter } from './CogAdapter';
+import { MosaicAdapter } from './MosaicAdapter';
 import { XyzAdapter } from './XyzAdapter';
 import { WmsAdapter } from './WmsAdapter';
 import { GeoJsonAdapter } from './GeoJsonAdapter';
@@ -22,6 +23,8 @@ function createResolvedAdapter(
   switch (spec.type) {
     case 'cog':
       return new CogAdapter(spec, ctx);
+    case 'mosaic':
+      return new MosaicAdapter(spec, ctx);
     case 'xyz':
       return new XyzAdapter(spec, ctx);
     case 'wms':
