@@ -14,6 +14,7 @@ export default defineConfig({
       input: {
         main: resolve(__dirname, 'index.html'),
         raster: resolve(__dirname, 'examples/raster/index.html'),
+        mosaic: resolve(__dirname, 'examples/mosaic/index.html'),
         vector: resolve(__dirname, 'examples/vector/index.html'),
         pace: resolve(__dirname, 'examples/pace/index.html'),
         worldview: resolve(__dirname, 'examples/worldview/index.html'),

@@ -112,6 +112,10 @@
       background: linear-gradient(135deg, #134e5e 0%, #71b280 100%);
     }
 
+    .card-image.mosaic {
+      background: linear-gradient(135deg, #2af598 0%, #009efd 100%);
+    }
+
     .card-icon {
       font-size: 4rem;
       opacity: 0.9;
@@ -223,6 +227,27 @@
 
   <div class="container">
     <div class="examples">
+      <div class="example-card">
+        <div class="card-image mosaic">
+          <span class="card-icon">🧩</span>
+        </div>
+        <div class="card-content">
+          <h2>Sentinel-2 Monthly Mosaics</h2>
+          <p>Step through monthly Sentinel-2 true-color mosaics over the French Alps. Each month is a STAC FeatureCollection of many COGs, stitched into a single deck.gl mosaic and rendered client-side via maplibre-gl-raster.</p>
+          <div class="card-tags">
+            <span class="tag">Raster</span>
+            <span class="tag">STAC</span>
+            <span class="tag">Mosaic</span>
+          </div>
+          <a href="examples/mosaic/" class="card-link">
+            View Example
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M5 12h14M12 5l7 7-7 7"/>
+            </svg>
+          </a>
+        </div>
+      </div>
+
       <div class="example-card">
         <div class="card-image raster">
           <span class="card-icon">🛰️</span>
