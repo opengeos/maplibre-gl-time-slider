@@ -496,7 +496,7 @@ describe('layersPopover', () => {
 
     it.each([
       ['', 'empty'],
-      ['not-a-number', 'unparseable'],
+      ['not-a-number', 'unparsable'],
     ])('leaves nodata unset for an %s entry', async (typed) => {
       vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('no network')));
       const addSource = vi.fn(() => 'id');

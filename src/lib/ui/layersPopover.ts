@@ -1024,7 +1024,7 @@ function buildForm(
   };
 
   // Parse the mosaic NoData field into the renderer's vocabulary. An empty or
-  // unparseable entry yields undefined, leaving the renderer on its 'auto'
+  // unparsable entry yields undefined, leaving the renderer on its 'auto'
   // default (honour whatever each COG declares) rather than guessing a value.
   const readMosaicNodata = (): number | 'off' | 'auto' | undefined => {
     const raw = mosaicNodataField.input.value.trim().toLowerCase();
