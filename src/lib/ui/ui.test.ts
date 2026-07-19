@@ -54,6 +54,9 @@ afterEach(() => {
   // Restore prototype spies (e.g. getBoundingClientRect) so a mock from one
   // test cannot leak into the next.
   vi.restoreAllMocks();
+  // Several tests mount their popover into the document to exercise real event
+  // dispatch; drop the mounted nodes so one test's DOM cannot reach the next.
+  document.body.replaceChildren();
 });
 
 describe('axisRenderer', () => {

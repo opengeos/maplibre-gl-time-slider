@@ -129,7 +129,9 @@ const EXAMPLES: Record<Exclude<SourceSpec['type'], 'custom'>, Example> = {
       rescaleMin: '',
       rescaleMax: '',
       nodata: '',
-      bands: '',
+      // NAIP is 4-band (R, G, B, NIR), so the first three are pinned for true
+      // color — left to auto-detect, the fourth band comes along for the ride.
+      bands: '1,2,3',
     },
   },
   // NASA GIBS MODIS Terra True Color WMTS imagery (examples/worldview).
