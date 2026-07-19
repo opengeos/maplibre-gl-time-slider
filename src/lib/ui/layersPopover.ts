@@ -112,18 +112,18 @@ const EXAMPLES: Record<Exclude<SourceSpec['type'], 'custom'>, Example> = {
       bands: '1,2,3',
     },
   },
-  // Monthly Sentinel-2 mosaics (STAC FeatureCollections) over the French Alps,
-  // one .json per month, rendered as a deck.gl mosaic by maplibre-gl-raster.
+  // Annual NAIP aerial imagery over North Dakota (STAC FeatureCollections),
+  // one .json per year, rendered as a deck.gl mosaic by maplibre-gl-raster.
   mosaic: {
     timeline: {
-      startDate: '2024-05-01',
-      endDate: '2024-09-01',
-      granularity: 'month',
-      granularities: ['month'],
+      startDate: '2014-01-01',
+      endDate: '2023-01-01',
+      granularity: 'year',
+      granularities: ['year'],
       speed: 1000,
     },
     fields: {
-      url: 'https://data.source.coop/giswqs/opengeos/s2_mosaic_ts/s2_{date:YYYY}_{date:MM}.json',
+      url: 'https://data.source.coop/giswqs/opengeos/naip_nd_{date:YYYY}_stac.json',
       engine: 'gpu',
       colormap: '',
       rescaleMin: '',
@@ -346,9 +346,6 @@ function enablePopoverResize(popover: HTMLElement): { syncSide: () => void } {
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
   });
-  // Clicking the grip should never bubble up to the document close handler.
-  grip.addEventListener('click', (e) => e.stopPropagation());
-
   return { syncSide };
 }
 
@@ -411,9 +408,11 @@ export function createLayersPopover(controller: DockController): LayersHandle {
 
   const resize = enablePopoverResize(popover);
 
-  const close = (): void => root.classList.remove('ts-open');
-  toggleBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
+  // The "+ Add data" button is the only thing that opens or closes the panel.
+  // Deliberately no click-outside dismissal: adding a layer means panning and
+  // zooming the map to see the result, and every one of those map clicks used to
+  // close the panel mid-edit.
+  toggleBtn.addEventListener('click', () => {
     const opening = !root.classList.contains('ts-open');
     root.classList.toggle('ts-open');
     if (opening) {
@@ -424,9 +423,6 @@ export function createLayersPopover(controller: DockController): LayersHandle {
       resize.syncSide();
     }
   });
-  popover.addEventListener('click', (e) => e.stopPropagation());
-  const onDocClick = (): void => close();
-  document.addEventListener('click', onDocClick);
 
   const refresh = (): void => {
     list.replaceChildren();
@@ -445,9 +441,9 @@ export function createLayersPopover(controller: DockController): LayersHandle {
 
   refresh();
 
-  const destroy = (): void => {
-    document.removeEventListener('click', onDocClick);
-  };
+  // Kept for API stability: every listener now lives on `root`'s own subtree and
+  // dies with it, so there is nothing left to unhook on the document.
+  const destroy = (): void => {};
 
   return { root, refresh, destroy };
 }

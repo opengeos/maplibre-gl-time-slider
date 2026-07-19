@@ -116,6 +116,10 @@
       background: linear-gradient(135deg, #2af598 0%, #009efd 100%);
     }
 
+    .card-image.naip {
+      background: linear-gradient(135deg, #8e9b3a 0%, #c79c30 50%, #6b4f2a 100%);
+    }
+
     .card-icon {
       font-size: 4rem;
       opacity: 0.9;
@@ -240,6 +244,27 @@
             <span class="tag">Mosaic</span>
           </div>
           <a href="examples/mosaic/" class="card-link">
+            View Example
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M5 12h14M12 5l7 7-7 7"/>
+            </svg>
+          </a>
+        </div>
+      </div>
+
+      <div class="example-card">
+        <div class="card-image naip">
+          <span class="card-icon">🚜</span>
+        </div>
+        <div class="card-content">
+          <h2>NAIP Annual Aerial Imagery</h2>
+          <p>Step through a decade of NAIP aerial imagery (2014-2023) over North Dakota farmland. Each year is a STAC FeatureCollection of many COGs, stitched into a single mosaic and rendered client-side via maplibre-gl-raster.</p>
+          <div class="card-tags">
+            <span class="tag">Raster</span>
+            <span class="tag">STAC</span>
+            <span class="tag">NAIP</span>
+          </div>
+          <a href="examples/naip/" class="card-link">
             View Example
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M5 12h14M12 5l7 7-7 7"/>

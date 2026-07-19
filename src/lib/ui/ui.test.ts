@@ -167,6 +167,24 @@ describe('layersPopover', () => {
     popover.destroy();
   });
 
+  it('stays open on outside clicks; only "+ Add data" toggles it shut', () => {
+    const popover = createLayersPopover(baseController());
+    document.body.appendChild(popover.root);
+    const toggle = popover.root.querySelector('.ts-add-data') as HTMLButtonElement;
+
+    toggle.click();
+    expect(popover.root.classList.contains('ts-open')).toBe(true);
+
+    // A click on the map (or anywhere else in the document) must not dismiss it.
+    document.body.click();
+    expect(popover.root.classList.contains('ts-open')).toBe(true);
+
+    toggle.click();
+    expect(popover.root.classList.contains('ts-open')).toBe(false);
+
+    popover.destroy();
+  });
+
   it('shows an empty state when there are no layers', () => {
     const popover = createLayersPopover(baseController());
     expect(popover.root.querySelector('.ts-layer-empty')).not.toBeNull();
