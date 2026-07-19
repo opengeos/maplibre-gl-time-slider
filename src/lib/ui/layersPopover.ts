@@ -28,34 +28,47 @@ const SOURCE_TYPES: { value: SourceSpec['type']; label: string }[] = [
 ];
 
 /**
- * Common colormaps offered in the colormap dropdown (TiTiler / matplotlib).
+ * Colormaps offered in the colormap dropdown. This mirrors the full named set
+ * shipped by `maplibre-gl-raster` (its `COLORMAP_NAMES` — the rio-tiler colormap
+ * catalogue of matplotlib + cmocean ramps), so the `mosaic` source's colormaps
+ * match what that engine renders, and TiTiler (`cog`) accepts the same names.
+ * Values are the lowercase keys the renderers expect; see {@link COLORMAP_LABELS}
+ * for display casing. Re-check against `maplibre-gl-raster` when bumping it.
  */
 const COLORMAPS = [
-  'viridis',
-  'plasma',
-  'inferno',
-  'magma',
-  'cividis',
-  'turbo',
-  'jet',
-  'rainbow',
-  'rdbu',
-  'rdylbu',
-  'rdylgn',
-  'spectral',
-  'coolwarm',
-  'bwr',
-  'seismic',
-  'greys',
-  'blues',
-  'greens',
-  'reds',
-  'ylorrd',
-  'ylgnbu',
-  'terrain',
-  'gist_earth',
-  'ocean',
+  'accent', 'afmhot', 'algae', 'amp', 'autumn', 'balance', 'binary', 'blues',
+  'bone', 'brbg', 'brg', 'bugn', 'bupu', 'bwr', 'cfastie', 'cividis', 'cmrmap',
+  'cool', 'coolwarm', 'copper', 'cubehelix', 'curl', 'dark2', 'deep', 'delta',
+  'dense', 'diff', 'flag', 'gist_earth', 'gist_gray', 'gist_heat', 'gist_ncar',
+  'gist_rainbow', 'gist_stern', 'gist_yarg', 'gnbu', 'gnuplot', 'gnuplot2',
+  'gray', 'greens', 'greys', 'haline', 'hot', 'hsv', 'ice', 'inferno', 'jet',
+  'magma', 'matter', 'nipy_spectral', 'ocean', 'oranges', 'orrd', 'oxy',
+  'paired', 'pastel1', 'pastel2', 'phase', 'pink', 'piyg', 'plasma', 'prgn',
+  'prism', 'pubu', 'pubugn', 'puor', 'purd', 'purples', 'rain', 'rainbow',
+  'rdbu', 'rdgy', 'rdpu', 'rdylbu', 'rdylgn', 'reds', 'rplumbo', 'schwarzwald',
+  'seismic', 'set1', 'set2', 'set3', 'solar', 'spectral', 'speed', 'spring',
+  'summer', 'tab10', 'tab20', 'tab20b', 'tab20c', 'tarn', 'tempo', 'terrain',
+  'thermal', 'topo', 'turbid', 'turbo', 'twilight', 'twilight_shifted',
+  'viridis', 'winter', 'wistia', 'ylgn', 'ylgnbu', 'ylorbr', 'ylorrd',
 ];
+
+/**
+ * Canonical display casing for the mixed-case colormap keys (mirrors
+ * `maplibre-gl-raster`'s `COLORMAP_DISPLAY_NAMES`). The value sent to the
+ * renderer stays the lowercase key; only the dropdown label is prettified.
+ * Keys not listed here are lowercase in matplotlib too and shown as-is.
+ */
+const COLORMAP_LABELS: Record<string, string> = {
+  greys: 'Greys', purples: 'Purples', blues: 'Blues', greens: 'Greens',
+  oranges: 'Oranges', reds: 'Reds', ylorbr: 'YlOrBr', ylorrd: 'YlOrRd',
+  orrd: 'OrRd', purd: 'PuRd', rdpu: 'RdPu', bupu: 'BuPu', gnbu: 'GnBu',
+  pubu: 'PuBu', ylgnbu: 'YlGnBu', pubugn: 'PuBuGn', bugn: 'BuGn', ylgn: 'YlGn',
+  wistia: 'Wistia', piyg: 'PiYG', prgn: 'PRGn', brbg: 'BrBG', puor: 'PuOr',
+  rdgy: 'RdGy', rdbu: 'RdBu', rdylbu: 'RdYlBu', rdylgn: 'RdYlGn',
+  spectral: 'Spectral', pastel1: 'Pastel1', pastel2: 'Pastel2', paired: 'Paired',
+  accent: 'Accent', dark2: 'Dark2', set1: 'Set1', set2: 'Set2', set3: 'Set3',
+  cmrmap: 'CMRmap',
+};
 
 /**
  * Timeline + settings that accompany an example source.
@@ -111,6 +124,7 @@ const EXAMPLES: Record<Exclude<SourceSpec['type'], 'custom'>, Example> = {
     },
     fields: {
       url: 'https://data.source.coop/giswqs/opengeos/s2_mosaic_ts/s2_{date:YYYY}_{date:MM}.json',
+      engine: 'gpu',
       colormap: '',
       rescaleMin: '',
       rescaleMax: '',
@@ -253,7 +267,7 @@ function colormapSelect(current?: string): HTMLSelectElement {
   for (const cmap of values) {
     const opt = document.createElement('option');
     opt.value = cmap;
-    opt.textContent = cmap;
+    opt.textContent = COLORMAP_LABELS[cmap] ?? cmap;
     select.appendChild(opt);
   }
   // Default to "None" (empty) when no colormap is set, which is correct for
@@ -860,6 +874,12 @@ function buildForm(
   const urlField = field('COG URL', 'https://.../{date:YYYY-MM-DD}.tif');
   // Mosaic manifest URL (MosaicJSON or STAC FeatureCollection), one per date.
   const mosaicUrlField = field('Mosaic URL', 'https://.../{date:YYYY}/{date:MM}/mosaic.json');
+  // Mosaic rendering engine: GPU (deck.gl, mercator only) or WASM
+  // (cog-tiler-wasm, renders in globe too). See MosaicSourceSpec.engine.
+  const engineField = selectField('Engine', [
+    { value: 'gpu', label: 'GPU (deck.gl)' },
+    { value: 'wasm', label: 'WASM (cog-tiler-wasm)' },
+  ]);
   const cmapRow = document.createElement('label');
   cmapRow.className = 'ts-field';
   const cmapSpan = document.createElement('span');
@@ -902,7 +922,7 @@ function buildForm(
     cog: [urlField.row, cmapRow, rescaleRow, nodataField.row, bandsField.row],
     // Shares the colormap/rescale/bands rows with COG (only one group is shown
     // at a time, so re-parenting the same nodes is safe); no TiTiler NoData.
-    mosaic: [mosaicUrlField.row, cmapRow, rescaleRow, bandsField.row],
+    mosaic: [mosaicUrlField.row, engineField.row, cmapRow, rescaleRow, bandsField.row],
     xyz: [tilesField.row],
     geojson: [dataField.row, timePropField.row, windowField.row],
     wms: [baseUrlField.row, wmsLayersField.row],
@@ -927,6 +947,7 @@ function buildForm(
     } else if (type === 'mosaic' && !mosaicUrlField.input.value) {
       const f = EXAMPLES.mosaic.fields;
       mosaicUrlField.input.value = f.url;
+      engineField.select.value = f.engine;
       cmapSelect.value = f.colormap;
       rescaleMin.value = f.rescaleMin;
       rescaleMax.value = f.rescaleMax;
@@ -1012,6 +1033,7 @@ function buildForm(
         id,
         name,
         url: mosaicUrlField.input.value,
+        engine: engineField.select.value === 'wasm' ? 'wasm' : 'gpu',
         colormap: cmapSelect.value || undefined,
         rescale: readRescale(),
         bidx: readBands(),

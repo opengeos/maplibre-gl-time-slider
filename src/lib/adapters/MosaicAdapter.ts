@@ -45,8 +45,14 @@ interface MosaicLayerManager {
 type MaplibreGlRasterModule = {
   LayerManager: new (
     map: AdapterContext['map'],
-    options?: { interleaved?: boolean },
+    options?: { interleaved?: boolean; engine?: string },
   ) => MosaicLayerManager;
+};
+
+/** Maps the spec's engine choice to a `maplibre-gl-raster` render-engine id. */
+const RASTER_ENGINE: Record<'gpu' | 'wasm', string> = {
+  gpu: 'maplibre-gl-raster',
+  wasm: 'cog-tiler-wasm',
 };
 
 /** Cached module promise so the lazy import happens once per session. */
@@ -120,6 +126,11 @@ export class MosaicAdapter extends BaseAdapter {
     this.visible = spec.visible ?? true;
   }
 
+  /** Whether this source renders on the GPU (deck.gl) engine. */
+  private get isGpuEngine(): boolean {
+    return (this.spec.engine ?? 'gpu') === 'gpu';
+  }
+
   /**
    * Creates the LayerManager on first use (lazy import + construction), reusing
    * it thereafter.
@@ -132,7 +143,10 @@ export class MosaicAdapter extends BaseAdapter {
       this.managerPromise = loadRasterModule().then((mod) => {
         // Guard against a remove() that landed while the module was loading.
         if (this.removed) throw new Error('MosaicAdapter removed before init');
-        this.manager = new mod.LayerManager(this.map, { interleaved: true });
+        this.manager = new mod.LayerManager(this.map, {
+          interleaved: true,
+          engine: RASTER_ENGINE[this.spec.engine ?? 'gpu'],
+        });
         return this.manager;
       });
     }
@@ -204,9 +218,11 @@ export class MosaicAdapter extends BaseAdapter {
    */
   private async render(date: Date): Promise<void> {
     this.lastDate = date;
-    // Switch to mercator before the first mosaic loads so its deck.gl layer
-    // never initializes under the globe view (where it errors and draws nothing).
-    if (!this.mercatorEnsured) {
+    // The GPU (deck.gl) engine can't render under a globe view, so switch to
+    // mercator before its first mosaic loads. The WASM engine renders through a
+    // MapLibre raster source, which works in globe, so its projection is left
+    // untouched.
+    if (!this.mercatorEnsured && this.isGpuEngine) {
       this.mercatorEnsured = true;
       this.ensureMercator();
     }
@@ -226,11 +242,13 @@ export class MosaicAdapter extends BaseAdapter {
         zoomTo: !this.fitted,
         beforeId: this.beforeId,
       });
-    } catch {
-      // A failed manifest load already surfaced on the LayerManager's own error
-      // channel; drop the layer we optimistically created and keep the previous
-      // mosaic on screen rather than throwing out of a scrub.
+    } catch (err) {
+      // Drop the layer we optimistically created and keep the previous mosaic on
+      // screen rather than throwing out of a scrub. Surface the reason (a failed
+      // manifest fetch, a CORS block, or the WASM engine not being installed /
+      // pre-bundled) so a blank map is diagnosable instead of silent.
       if (!this.removed && manager.getLayer(nextId)) manager.removeRaster(nextId);
+      console.error(`[time-slider] mosaic failed to load: ${url}`, err);
       return;
     }
     // A newer date won the race, or we were torn down, while the manifest

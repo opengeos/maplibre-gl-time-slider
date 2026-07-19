@@ -33,13 +33,18 @@ const map = new maplibregl.Map({
 
 map.addControl(new maplibregl.NavigationControl(), 'top-right');
 map.addControl(new maplibregl.FullscreenControl(), 'top-right');
+// A globe toggle: this example uses the WASM engine, which renders through a
+// MapLibre raster source and so works in globe as well as mercator.
+map.addControl(new maplibregl.GlobeControl(), 'top-right');
 
 map.on('load', () => {
   // A `mosaic` source renders each date's manifest (a MosaicJSON or STAC
-  // FeatureCollection of many COGs) as one deck.gl spatial mosaic, delegated to
-  // `maplibre-gl-raster` (an optional peer, loaded lazily on first use). Adding
-  // it fits the view to the first mosaic and switches the map to a mercator
-  // projection — the deck.gl tiler cannot render under MapLibre's globe view.
+  // FeatureCollection of many COGs) as one mosaic, delegated to
+  // `maplibre-gl-raster` (an optional peer, loaded lazily on first use). This
+  // example uses the `wasm` engine (`cog-tiler-wasm`), which composites tiles on
+  // the CPU into a MapLibre raster source, so it renders in globe as well as
+  // mercator — toggle the globe control to see it hold up either way. (The
+  // default `gpu` engine is faster but forces mercator.)
   //
   // The imagery is 3-band true-color (visual/TCI), so it auto-renders as RGB
   // with no colormap or rescale needed. Stepping the timeline swaps the whole
@@ -56,6 +61,7 @@ map.on('load', () => {
         id: 's2-mosaic-ts',
         name: 'Sentinel-2 Monthly Mosaic',
         url: MOSAIC_URL,
+        engine: 'wasm',
       },
     ],
     onChange: (date) => console.log('Sentinel-2 month:', date.toISOString().slice(0, 7)),
