@@ -17,6 +17,7 @@ interface MosaicRasterState {
   mode: 'rgb' | 'single' | 'index';
   colormap: string;
   rescale: [number, number][] | null;
+  nodata: number | 'off' | 'auto';
 }
 
 /** Options accepted by `LayerManager.addRaster` that this adapter uses. */
@@ -167,7 +168,10 @@ export class MosaicAdapter extends BaseAdapter {
       opacity: this.opacity,
       visible: this.visible,
     };
-    const { colormap, rescale, bidx } = this.spec;
+    const { colormap, rescale, bidx, nodata } = this.spec;
+    // Left unset when the spec omits it, so the renderer keeps its own 'auto'
+    // default (honour the value each COG declares) rather than being pinned.
+    if (nodata !== undefined) state.nodata = nodata;
     if (bidx && bidx.length > 0) {
       state.bands = bidx;
       state.mode = bidx.length >= 3 ? 'rgb' : 'single';

@@ -445,4 +445,70 @@ describe('layersPopover', () => {
 
     popover.destroy();
   });
+
+  // A mosaic renders client-side through maplibre-gl-raster rather than
+  // TiTiler, so its NoData field takes that renderer's auto/off/number
+  // vocabulary instead of TiTiler's number/'nan'.
+  describe('mosaic NoData field', () => {
+    /** Opens the add form on the mosaic type and returns its NoData input. */
+    const openMosaicForm = (
+      addSource: ReturnType<typeof vi.fn>
+    ): { popover: ReturnType<typeof createLayersPopover>; nodata: HTMLInputElement } => {
+      const popover = createLayersPopover(baseController({ addSource }));
+      document.body.appendChild(popover.root);
+      (popover.root.querySelector('.ts-add-data') as HTMLButtonElement).click();
+
+      const typeSelect = popover.root.querySelector(
+        '.ts-add-form .ts-type-select'
+      ) as HTMLSelectElement;
+      typeSelect.value = 'mosaic';
+      typeSelect.dispatchEvent(new Event('change'));
+
+      // Locate by label rather than index so adding a field cannot silently
+      // point this at the wrong input.
+      const rows = [
+        ...popover.root.querySelectorAll('.ts-add-form .ts-form-fields .ts-field'),
+      ] as HTMLElement[];
+      const row = rows.find((r) => r.querySelector('span')?.textContent === 'NoData');
+      expect(row, 'the mosaic form must expose a NoData field').toBeDefined();
+      return { popover, nodata: row!.querySelector('input') as HTMLInputElement };
+    };
+
+    const submittedSpec = (addSource: ReturnType<typeof vi.fn>): { nodata?: unknown } =>
+      addSource.mock.calls[0][0] as { nodata?: unknown };
+
+    it.each([
+      ['-9999', -9999],
+      ['auto', 'auto'],
+      ['off', 'off'],
+      ['OFF', 'off'],
+    ])('parses %o into %o', async (typed, expected) => {
+      vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('no network')));
+      const addSource = vi.fn(() => 'id');
+      const { popover, nodata } = openMosaicForm(addSource);
+      nodata.value = typed;
+      (popover.root.querySelector('.ts-add-submit') as HTMLButtonElement).click();
+
+      await vi.waitFor(() => expect(addSource).toHaveBeenCalledTimes(1));
+      expect(submittedSpec(addSource).nodata).toBe(expected);
+      popover.destroy();
+    });
+
+    it.each([
+      ['', 'empty'],
+      ['not-a-number', 'unparseable'],
+    ])('leaves nodata unset for an %s entry', async (typed) => {
+      vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('no network')));
+      const addSource = vi.fn(() => 'id');
+      const { popover, nodata } = openMosaicForm(addSource);
+      nodata.value = typed;
+      (popover.root.querySelector('.ts-add-submit') as HTMLButtonElement).click();
+
+      await vi.waitFor(() => expect(addSource).toHaveBeenCalledTimes(1));
+      // Undefined, not a guessed value: the renderer then keeps its 'auto'
+      // default and honours whatever each COG declares.
+      expect(submittedSpec(addSource).nodata).toBeUndefined();
+      popover.destroy();
+    });
+  });
 });

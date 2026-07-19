@@ -128,6 +128,7 @@ const EXAMPLES: Record<Exclude<SourceSpec['type'], 'custom'>, Example> = {
       colormap: '',
       rescaleMin: '',
       rescaleMax: '',
+      nodata: '',
       bands: '',
     },
   },
@@ -901,6 +902,11 @@ function buildForm(
   rescaleInputs.append(rescaleMin, rescaleMax);
   rescaleRow.append(rescaleSpan, rescaleInputs);
   const nodataField = field('NoData', 'nan or number');
+  // Mosaic NoData is a separate field rather than a re-parented `nodataField`:
+  // the two take different vocabularies (TiTiler's `nan`/number vs the
+  // renderer's auto/off/number), and sharing one node would also carry the COG
+  // example's prefilled `0` over when the user switches type.
+  const mosaicNodataField = field('NoData', 'auto, off, or number');
   // Comma-separated 1-based band indexes, e.g. "1,2,3" for an RGB composite.
   const bandsField = field('Bands (optional)', 'e.g. 1,2,3');
 
@@ -921,8 +927,17 @@ function buildForm(
   const groups: Record<SourceSpec['type'], HTMLElement[]> = {
     cog: [urlField.row, cmapRow, rescaleRow, nodataField.row, bandsField.row],
     // Shares the colormap/rescale/bands rows with COG (only one group is shown
-    // at a time, so re-parenting the same nodes is safe); no TiTiler NoData.
-    mosaic: [mosaicUrlField.row, engineField.row, cmapRow, rescaleRow, bandsField.row],
+    // at a time, so re-parenting the same nodes is safe). NoData is its own
+    // field: a mosaic renders client-side, so it takes the renderer's
+    // auto/off/number spelling rather than TiTiler's.
+    mosaic: [
+      mosaicUrlField.row,
+      engineField.row,
+      cmapRow,
+      rescaleRow,
+      mosaicNodataField.row,
+      bandsField.row,
+    ],
     xyz: [tilesField.row],
     geojson: [dataField.row, timePropField.row, windowField.row],
     wms: [baseUrlField.row, wmsLayersField.row],
@@ -951,6 +966,7 @@ function buildForm(
       cmapSelect.value = f.colormap;
       rescaleMin.value = f.rescaleMin;
       rescaleMax.value = f.rescaleMax;
+      mosaicNodataField.input.value = f.nodata;
       bandsField.input.value = f.bands;
     } else if (type === 'xyz' && !tilesField.input.value) {
       tilesField.input.value = EXAMPLES.xyz.fields.tiles;
@@ -1007,6 +1023,17 @@ function buildForm(
     return bands.length > 0 ? bands : undefined;
   };
 
+  // Parse the mosaic NoData field into the renderer's vocabulary. An empty or
+  // unparseable entry yields undefined, leaving the renderer on its 'auto'
+  // default (honour whatever each COG declares) rather than guessing a value.
+  const readMosaicNodata = (): number | 'off' | 'auto' | undefined => {
+    const raw = mosaicNodataField.input.value.trim().toLowerCase();
+    if (!raw) return undefined;
+    if (raw === 'auto' || raw === 'off') return raw;
+    const value = Number(raw);
+    return Number.isFinite(value) ? value : undefined;
+  };
+
   const addBtn = document.createElement('button');
   addBtn.type = 'button';
   addBtn.className = 'time-slider-btn ts-add-submit';
@@ -1036,6 +1063,7 @@ function buildForm(
         engine: engineField.select.value === 'wasm' ? 'wasm' : 'gpu',
         colormap: cmapSelect.value || undefined,
         rescale: readRescale(),
+        nodata: readMosaicNodata(),
         bidx: readBands(),
       };
     } else if (type === 'xyz' && tilesField.input.value) {

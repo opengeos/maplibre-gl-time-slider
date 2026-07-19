@@ -164,6 +164,46 @@ describe('MosaicAdapter', () => {
     expect(state.rescale).toBeUndefined();
   });
 
+  it('forwards a numeric nodata to the renderer', async () => {
+    const { map } = createStubMap();
+    const adapter = new MosaicAdapter(
+      {
+        type: 'mosaic',
+        id: 'm-nodata',
+        url: 'https://e/{YYYY}_{MM}.json',
+        colormap: 'jet',
+        rescale: [0, 30],
+        nodata: -9999,
+      },
+      { map }
+    );
+    await adapter.add(d1);
+    const state = lastManager().addCalls[0].options.state as Record<string, unknown>;
+    expect(state.nodata).toBe(-9999);
+  });
+
+  it("forwards the 'off' nodata sentinel", async () => {
+    const { map } = createStubMap();
+    const adapter = new MosaicAdapter(
+      { type: 'mosaic', id: 'm-nodata-off', url: 'https://e/{YYYY}_{MM}.json', nodata: 'off' },
+      { map }
+    );
+    await adapter.add(d1);
+    const state = lastManager().addCalls[0].options.state as Record<string, unknown>;
+    expect(state.nodata).toBe('off');
+  });
+
+  it("leaves nodata unset so the renderer keeps its own 'auto' default", async () => {
+    const { map } = createStubMap();
+    const adapter = new MosaicAdapter(
+      { type: 'mosaic', id: 'm-nodata-absent', url: 'https://e/{YYYY}_{MM}.json' },
+      { map }
+    );
+    await adapter.add(d1);
+    const state = lastManager().addCalls[0].options.state as Record<string, unknown>;
+    expect('nodata' in state).toBe(false);
+  });
+
   it('tears down the LayerManager on remove and drops a late in-flight load', async () => {
     const { map } = createStubMap();
     const adapter = new MosaicAdapter(

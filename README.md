@@ -20,7 +20,7 @@ A MapLibre GL JS plugin for visualizing time series raster and vector data with 
   - **XYZ / WMTS** raster tiles
   - **WMS-Time** (OGC `TIME` parameter)
   - **GeoJSON** filtered by a time property
-- **"Add data" GUI** (a resizable panel) to configure the timeline (range, interval, initial date), tweak settings (granularity, which granularities show as pills, speed, loop, theme, date format, auto-play), and add layers at runtime. Picking a source type loads a ready-to-run example (URL, timeline, and settings) you can edit. Per-layer controls include opacity, a visibility toggle, and for COG a colormap dropdown with a "None" option for RGB / multi-band imagery, rescale, nodata, and band selection
+- **"Add data" GUI** (a resizable panel) to configure the timeline (range, interval, initial date), tweak settings (granularity, which granularities show as pills, speed, loop, theme, date format, auto-play), and add layers at runtime. Picking a source type loads a ready-to-run example (URL, timeline, and settings) you can edit. Per-layer controls include opacity, a visibility toggle, and for COG a colormap dropdown with a "None" option for RGB / multi-band imagery, rescale, nodata, and band selection (a mosaic exposes the same, with NoData in the renderer's auto/off/number form)
 - Time-to-URL templating with tokens (`{YYYY}`, `{MM}`, `{DD}`, `{HH}`, `{date:FORMAT}`) **or** a `(date) => url` function
 - `onChange` callback escape hatch for fully custom wiring
 - Serializable config (`getConfig` / `setConfig`) for sharing state
@@ -168,9 +168,16 @@ each date is a *collection* of images rather than one COG.
   colormap: 'viridis',     // single-band mosaics only; omit for RGB imagery
   rescale: [0, 3000],      // applied per channel (needs bidx or a colormap)
   bidx: [1, 2, 3],         // band indexes; 3+ = RGB, 1 = single-band
+  nodata: 'auto',          // 'auto' (default) | 'off' | a number — see below
   opacity: 0.9,
 }
 ```
+
+**NoData.** `'auto'` (the default) uses the value each COG declares and treats
+NaN as nodata for float data; `'off'` renders every pixel; a number overrides the
+declared value in source units. Note this is *not* the same spelling as the `cog`
+source's `nodata`, which is a TiTiler query parameter (a number or `'nan'`) — a
+mosaic is composited client-side, so it takes the renderer's own vocabulary.
 
 **Engine.** Two rendering backends are available:
 
