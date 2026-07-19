@@ -181,7 +181,7 @@ describe('MosaicAdapter', () => {
     expect(mgr.destroyed).toBe(true);
   });
 
-  it('forces the map to mercator so the deck.gl mosaic can render (not globe)', async () => {
+  it('defaults to the gpu engine and forces mercator (deck.gl cannot render in globe)', async () => {
     const { map } = createStubMap();
     const setProjection = vi.fn();
     Object.assign(map, {
@@ -194,7 +194,27 @@ describe('MosaicAdapter', () => {
       { map }
     );
     await adapter.add(d1);
+    expect(lastManager().options).toMatchObject({ engine: 'maplibre-gl-raster' });
     expect(setProjection).toHaveBeenCalledWith({ type: 'mercator' });
+  });
+
+  it('uses the cog-tiler-wasm engine and leaves globe untouched when engine=wasm', async () => {
+    const { map } = createStubMap();
+    const setProjection = vi.fn();
+    Object.assign(map, {
+      getProjection: vi.fn(() => ({ type: 'globe' })),
+      setProjection,
+      once: vi.fn(),
+    });
+    const adapter = new MosaicAdapter(
+      { type: 'mosaic', id: 'm8w', url: 'https://e/{YYYY}_{MM}.json', engine: 'wasm' },
+      { map }
+    );
+    await adapter.add(d1);
+    expect(lastManager().options).toMatchObject({ engine: 'cog-tiler-wasm' });
+    // The WASM engine renders through a MapLibre raster source, which works in
+    // globe, so the projection must NOT be forced to mercator.
+    expect(setProjection).not.toHaveBeenCalled();
   });
 
   it('leaves an already-mercator map untouched', async () => {

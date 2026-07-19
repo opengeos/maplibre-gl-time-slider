@@ -13,6 +13,16 @@ export default defineConfig({
       '@': resolve(__dirname, 'src'),
     },
   },
+  // The `mosaic` source's WASM engine lazy-loads `cog-tiler-wasm` (an optional
+  // peer of `maplibre-gl-raster`). Without these hints the dev server serves an
+  // optional-peer stub for it and the tiler silently renders nothing. Mirrors
+  // the config a consumer app needs (e.g. GeoLibre): serve the wasm-bindgen
+  // packages as-is (their `new URL(...wasm, import.meta.url)` asset references
+  // break under esbuild pre-bundling) and pre-bundle their plain-JS deps.
+  optimizeDeps: {
+    exclude: ['cog-tiler-wasm', 'whitebox-wasm'],
+    include: ['proj4', 'geotiff', 'geotiff-geokeys-to-proj4'],
+  },
   build: {
     lib: {
       entry: {

@@ -164,12 +164,24 @@ each date is a *collection* of images rather than one COG.
 {
   type: 'mosaic',
   url: 'https://example.com/{date:YYYY}/{date:MM}/mosaic.json', // or (date) => url
+  engine: 'gpu',           // 'gpu' (default) or 'wasm' — see below
   colormap: 'viridis',     // single-band mosaics only; omit for RGB imagery
   rescale: [0, 3000],      // applied per channel (needs bidx or a colormap)
   bidx: [1, 2, 3],         // band indexes; 3+ = RGB, 1 = single-band
   opacity: 0.9,
 }
 ```
+
+**Engine.** Two rendering backends are available:
+
+- **`'gpu'`** (default) — the deck.gl mosaic engine. Fast and GPU-composited, but
+  it cannot render under MapLibre's globe view, so adding the mosaic **forces a
+  mercator projection**.
+- **`'wasm'`** — the [`cog-tiler-wasm`](https://github.com/opengeos/maplibre-gl-raster#rendering-engines)
+  engine. It composites each tile on the CPU and serves it as a normal MapLibre
+  raster source, so it renders in **globe** as well as mercator (the projection
+  is left untouched). Slower than the GPU engine, and it needs `cog-tiler-wasm`
+  and its peers installed alongside `maplibre-gl-raster` (both are lazy-loaded).
 
 Rendering is delegated to
 [`maplibre-gl-raster`](https://github.com/opengeos/maplibre-gl-raster) (an

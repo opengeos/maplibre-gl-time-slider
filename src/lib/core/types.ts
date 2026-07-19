@@ -138,6 +138,21 @@ export interface MosaicSourceSpec extends BaseSourceSpec {
   url: UrlInput;
 
   /**
+   * Rendering engine.
+   *
+   * - `'gpu'` (default) — the deck.gl mosaic engine. Fast, GPU-composited, but
+   *   cannot render under MapLibre's globe view, so adding the mosaic forces a
+   *   mercator projection.
+   * - `'wasm'` — the `cog-tiler-wasm` engine (an additional optional peer of
+   *   `maplibre-gl-raster`). Composites each tile on the CPU and serves it as a
+   *   normal MapLibre raster source, so it renders in **globe** as well as
+   *   mercator (the projection is left untouched). Slower than the GPU engine.
+   *
+   * @default 'gpu'
+   */
+  engine?: 'gpu' | 'wasm';
+
+  /**
    * Colormap name applied to a single-band mosaic. Ignored for RGB / multi-band
    * imagery, which is the common case and needs no colormap.
    */
