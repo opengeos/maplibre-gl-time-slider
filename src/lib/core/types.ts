@@ -116,6 +116,49 @@ export interface CogSourceSpec extends BaseSourceSpec {
 }
 
 /**
+ * A mosaic manifest (MosaicJSON or STAC `FeatureCollection`) whose URL changes
+ * per date, rendered client-side as a deck.gl mosaic by `maplibre-gl-raster`.
+ *
+ * Unlike {@link CogSourceSpec} (one COG per date through TiTiler), each date
+ * resolves to a whole `.json` manifest listing many COGs, drawn as a single
+ * stitched layer — so every timeline step is a full spatial mosaic. This lets
+ * the slider step through a series of dated mosaic files (e.g. one per month).
+ *
+ * Rendering is delegated to `maplibre-gl-raster`, which the consumer must have
+ * installed (it is an optional peer dependency); the module is imported lazily
+ * the first time a mosaic source is added, so it never enters the base bundle.
+ */
+export interface MosaicSourceSpec extends BaseSourceSpec {
+  type: 'mosaic';
+
+  /**
+   * URL of the mosaic manifest (`.json`) for the current date. A token template
+   * (e.g. `https://.../{YYYY}/{MM}/mosaic.json`) or a resolver function.
+   */
+  url: UrlInput;
+
+  /**
+   * Colormap name applied to a single-band mosaic. Ignored for RGB / multi-band
+   * imagery, which is the common case and needs no colormap.
+   */
+  colormap?: string;
+
+  /**
+   * Min/max window used to rescale the data. Applied to every rendered channel.
+   * Only honoured when the channel count is known — i.e. when {@link bidx} is
+   * given (one window per band) or {@link colormap} implies a single band;
+   * otherwise the mosaic auto-stretches from its first asset's statistics.
+   */
+  rescale?: [number, number];
+
+  /**
+   * Band indexes to read (1-based). Three or more selects an RGB composite;
+   * one selects single-band rendering.
+   */
+  bidx?: number[];
+}
+
+/**
  * A pre-tiled XYZ/WMTS raster source whose tile URL embeds the date.
  */
 export interface XyzSourceSpec extends BaseSourceSpec {
@@ -250,7 +293,12 @@ export interface CustomSourceSpec extends BaseSourceSpec {
 /**
  * Any built-in (non-custom) source specification.
  */
-export type ResolvedSourceSpec = CogSourceSpec | XyzSourceSpec | WmsSourceSpec | GeoJsonSourceSpec;
+export type ResolvedSourceSpec =
+  | CogSourceSpec
+  | MosaicSourceSpec
+  | XyzSourceSpec
+  | WmsSourceSpec
+  | GeoJsonSourceSpec;
 
 /**
  * Any source specification accepted by the control.
