@@ -171,6 +171,21 @@ export interface MosaicSourceSpec extends BaseSourceSpec {
    * one selects single-band rendering.
    */
   bidx?: number[];
+
+  /**
+   * NoData handling, passed through to `maplibre-gl-raster`.
+   *
+   * - `'auto'` (default) — use the value each COG declares, and treat NaN as
+   *   nodata for float data.
+   * - `'off'` — render every pixel, including the declared nodata.
+   * - a number — override the declared value, in source units.
+   *
+   * Note this is *not* the same vocabulary as {@link CogSourceSpec.nodata},
+   * which is a TiTiler query parameter (a number or `'nan'`). A mosaic is
+   * rendered client-side rather than by TiTiler, so it takes the renderer's
+   * own spelling.
+   */
+  nodata?: number | 'off' | 'auto';
 }
 
 /**
