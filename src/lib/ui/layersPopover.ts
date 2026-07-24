@@ -27,6 +27,10 @@ const SOURCE_TYPES: { value: SourceSpec['type']; label: string }[] = [
   { value: 'wms', label: 'WMS-Time' },
 ];
 
+/** Default TiTiler endpoint, mirroring the CogAdapter / buildTiTilerTileUrl
+ * default so the COG form's endpoint field ships a working value. */
+const TITILER_DEFAULT_ENDPOINT = 'https://titiler.d2s.org';
+
 /**
  * Colormaps offered in the colormap dropdown. This mirrors the full named set
  * shipped by `maplibre-gl-raster` (its `COLORMAP_NAMES` — the rio-tiler colormap
@@ -934,6 +938,10 @@ function buildForm(
 
   // Per-type fields.
   const urlField = field('COG URL', 'https://.../{date:YYYY-MM-DD}.tif');
+  // TiTiler endpoint that serves the COG's tiles. Pre-filled with the same
+  // default the adapter uses so the box shows a usable value out of the box.
+  const endpointField = field('TiTiler endpoint', TITILER_DEFAULT_ENDPOINT);
+  endpointField.input.value = TITILER_DEFAULT_ENDPOINT;
   // Mosaic manifest URL (MosaicJSON or STAC FeatureCollection), one per date.
   const mosaicUrlField = field('Mosaic URL', 'https://.../{date:YYYY}/{date:MM}/mosaic.json');
   // Mosaic rendering engine: GPU (deck.gl, mercator only) or WASM
@@ -986,7 +994,7 @@ function buildForm(
   const wmsLayersField = field('WMS layers', 'layer-name');
 
   const groups: Record<SourceSpec['type'], HTMLElement[]> = {
-    cog: [urlField.row, cmapRow, rescaleRow, nodataField.row, bandsField.row],
+    cog: [urlField.row, cmapRow, rescaleRow, nodataField.row, bandsField.row, endpointField.row],
     // Shares the colormap/rescale/bands rows with COG (only one group is shown
     // at a time, so re-parenting the same nodes is safe). NoData is its own
     // field: a mosaic renders client-side, so it takes the renderer's
@@ -1058,10 +1066,14 @@ function buildForm(
     onConfigApplied();
   };
 
+  // Swap the visible field group for a type without touching field values.
+  const showFields = (type: SourceSpec['type']): void => {
+    fieldHost.replaceChildren(nameField.row, idField.row, ...groups[type]);
+  };
   const renderFields = (): void => {
     const type = typeSelect.value as SourceSpec['type'];
     applyExampleFields(type);
-    fieldHost.replaceChildren(nameField.row, idField.row, ...groups[type]);
+    showFields(type);
   };
   typeSelect.addEventListener('change', () => {
     renderFields();
@@ -1119,6 +1131,7 @@ function buildForm(
         id,
         name,
         url: urlField.input.value,
+        endpoint: endpointField.input.value.trim() || undefined,
         colormap: cmapSelect.value || undefined,
         rescale: readRescale(),
         nodata: nodataField.input.value || undefined,
@@ -1204,20 +1217,35 @@ function buildForm(
     // form representation, so leave whatever is there untouched.
     if (!SOURCE_TYPES.some((t) => t.value === src.type)) return;
     const asStr = (v: unknown): string => (typeof v === 'string' ? v : '');
+    // A URL-bearing field may be a string template (shown verbatim so its
+    // `{date:...}` tokens stay visible and editable) or a resolver function
+    // (which has no editable template, so resolve it for the current date to
+    // show a concrete URL rather than an empty box).
+    const asUrl = (v: unknown): string => {
+      if (typeof v === 'string') return v;
+      if (typeof v !== 'function') return '';
+      try {
+        const resolved = resolveUrl(v as never, controller.getState().currentDate);
+        return typeof resolved === 'string' ? resolved : '';
+      } catch {
+        return '';
+      }
+    };
     const rescale = Array.isArray(src.rescale) ? (src.rescale as number[]) : null;
     const bandsStr = Array.isArray(src.bidx) ? (src.bidx as number[]).join(',') : '';
     typeSelect.value = src.type;
     nameField.input.value = asStr(src.name);
     idField.input.value = asStr(src.id);
     if (src.type === 'cog') {
-      urlField.input.value = asStr(src.url);
+      urlField.input.value = asUrl(src.url);
+      endpointField.input.value = asStr(src.endpoint) || TITILER_DEFAULT_ENDPOINT;
       cmapSelect.value = asStr(src.colormap);
       rescaleMin.value = rescale ? String(rescale[0]) : '';
       rescaleMax.value = rescale ? String(rescale[1]) : '';
       nodataField.input.value = src.nodata != null ? String(src.nodata) : '';
       bandsField.input.value = bandsStr;
     } else if (src.type === 'mosaic') {
-      mosaicUrlField.input.value = asStr(src.url);
+      mosaicUrlField.input.value = asUrl(src.url);
       engineField.select.value = src.engine === 'wasm' ? 'wasm' : 'gpu';
       cmapSelect.value = asStr(src.colormap);
       rescaleMin.value = rescale ? String(rescale[0]) : '';
@@ -1225,9 +1253,9 @@ function buildForm(
       mosaicNodataField.input.value = src.nodata != null ? String(src.nodata) : '';
       bandsField.input.value = bandsStr;
     } else if (src.type === 'xyz') {
-      tilesField.input.value = asStr(src.tiles);
+      tilesField.input.value = asUrl(src.tiles);
     } else if (src.type === 'geojson') {
-      dataField.input.value = asStr(src.data);
+      dataField.input.value = asUrl(src.data);
       timePropField.input.value = asStr(src.timeProperty);
       const unit = (src.window as { unit?: string } | undefined)?.unit;
       if (unit) windowField.select.value = unit;
@@ -1235,7 +1263,10 @@ function buildForm(
       baseUrlField.input.value = asStr(src.baseUrl);
       wmsLayersField.input.value = asStr(src.layers);
     }
-    renderFields();
+    // Show the matching field group without re-running the example prefill,
+    // which would clobber the values just set (e.g. when the source URL is a
+    // resolver function and the URL field is left blank).
+    showFields(src.type);
   };
   // Reflect any source that already exists at build time (a restored project or
   // an example configured before the panel is first opened).
