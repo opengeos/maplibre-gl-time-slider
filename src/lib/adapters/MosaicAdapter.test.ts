@@ -273,6 +273,39 @@ describe('MosaicAdapter', () => {
     expect(setProjection).not.toHaveBeenCalled();
   });
 
+  it('reports data availability and skips re-fetching a known-missing date', async () => {
+    const { map } = createStubMap();
+    const status: { id: string; available: boolean }[] = [];
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const adapter = new MosaicAdapter(
+      { type: 'mosaic', id: 'chla', url: 'https://e/{YYYY}_{MM}.json' },
+      { map, onDataStatus: (id, available) => status.push({ id, available }) }
+    );
+    // First date loads: reports available.
+    await adapter.add(d1);
+    expect(status.at(-1)).toEqual({ id: 'chla', available: true });
+
+    // Second date's manifest is inaccessible: addRaster throws.
+    const mgr = lastManager();
+    const addSpy = vi
+      .spyOn(mgr, 'addRaster')
+      .mockRejectedValueOnce(new Error('404'));
+    await adapter.update(d2);
+    expect(status.at(-1)).toEqual({ id: 'chla', available: false });
+    // A missing manifest is not surfaced as a console error (no scrub flood).
+    expect(errorSpy).not.toHaveBeenCalled();
+    expect(addSpy).toHaveBeenCalledTimes(1);
+
+    // Revisiting the same missing date does not re-fetch it, just re-reports.
+    addSpy.mockClear();
+    status.length = 0;
+    await adapter.update(d2);
+    expect(addSpy).not.toHaveBeenCalled();
+    expect(status).toContainEqual({ id: 'chla', available: false });
+
+    errorSpy.mockRestore();
+  });
+
   it('is constructed by the registry for a mosaic spec', () => {
     const { map } = createStubMap();
     const spec: MosaicSourceSpec = { type: 'mosaic', url: 'https://e/{YYYY}.json' };

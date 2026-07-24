@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createStubMap } from '../../../tests/stubMap';
 import { CogAdapter } from './CogAdapter';
 import { XyzAdapter } from './XyzAdapter';
@@ -10,8 +10,19 @@ import { addUnits } from '../time/granularity';
 const d1 = new Date('2024-04-18T00:00:00Z');
 const d2 = new Date('2024-04-19T00:00:00Z');
 
+// The COG adapter probes TiTiler for each date's availability; stub it "found"
+// by default so tile-building tests don't touch the network.
+function stubTiTilerFound(): void {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }));
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe('CogAdapter', () => {
   it('builds a TiTiler raster source/layer and re-tiles on update', async () => {
+    stubTiTilerFound();
     const { map, sources } = createStubMap();
     const adapter = new CogAdapter(
       {
@@ -40,11 +51,34 @@ describe('CogAdapter', () => {
   });
 
   it('re-renders the current date when colormap changes via setProperty', async () => {
+    stubTiTilerFound();
     const { map, sources } = createStubMap();
     const adapter = new CogAdapter({ type: 'cog', id: 'c2', url: 'https://e/x.tif' }, { map });
     await adapter.add(d1);
     await adapter.setProperty({ colormap: 'viridis' } as never);
     expect(sources.get('c2')!.setTiles.mock.calls[0][0][0]).toContain('colormap_name=viridis');
+  });
+
+  it('signals no data and skips tiling when TiTiler cannot find the date COG', async () => {
+    // TiTiler responds non-OK (the COG for this date does not exist).
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 404 }));
+    const { map } = createStubMap();
+    const status: boolean[] = [];
+    const adapter = new CogAdapter(
+      { type: 'cog', id: 'c-missing', url: 'https://e/{YYYY}-{MM}-{DD}.tif' },
+      { map, onDataStatus: (_id, available) => status.push(available) }
+    );
+    await adapter.add(d1);
+
+    // No raster source was added for the missing date, and "no data" was reported.
+    expect(map.addSource).not.toHaveBeenCalled();
+    expect(status).toEqual([false]);
+
+    // Scrubbing back to the same missing date does not re-probe (cached).
+    const fetchSpy = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchSpy.mockClear();
+    await adapter.update(d1);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
 

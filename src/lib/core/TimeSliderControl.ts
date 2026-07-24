@@ -69,6 +69,10 @@ export class TimeSliderControl implements IControl, DockController {
   private _adapters: SourceAdapter[] = [];
   private _eventHandlers: EventHandlersMap = new globalThis.Map();
   private _playbackInterval?: ReturnType<typeof setInterval>;
+  /** Ids of sources reporting no data for the current date (drives the dock's
+   * "no data" indicator). A source is added on a failed/absent load and removed
+   * once it loads a date. */
+  private _unavailableSources = new globalThis.Set<string>();
 
   /**
    * Creates a new TimeSliderControl.
@@ -712,6 +716,7 @@ export class TimeSliderControl implements IControl, DockController {
     const adapter = createAdapter(spec, {
       map: this._map,
       beforeId: this._options.beforeId,
+      onDataStatus: (id, available) => this._handleDataStatus(id, available),
     });
     this._adapters.push(adapter);
     void Promise.resolve(adapter.add(this._state.currentDate))
@@ -739,6 +744,11 @@ export class TimeSliderControl implements IControl, DockController {
     if (index === -1) return;
     this._adapters[index].remove();
     this._adapters.splice(index, 1);
+    // Drop any "no data" state the removed source was holding, and clear the
+    // indicator if it was the last unavailable source.
+    if (this._unavailableSources.delete(id) && this._unavailableSources.size === 0) {
+      this._view?.syncDataStatus(false);
+    }
     this._view?.refreshLayers();
     this._emit('sourceremove');
   }
@@ -851,7 +861,11 @@ export class TimeSliderControl implements IControl, DockController {
 
     if (this._map) {
       for (const spec of config.sources) {
-        const adapter = createAdapter(spec, { map: this._map, beforeId: this._options.beforeId });
+        const adapter = createAdapter(spec, {
+          map: this._map,
+          beforeId: this._options.beforeId,
+          onDataStatus: (id, available) => this._handleDataStatus(id, available),
+        });
         this._adapters.push(adapter);
         void Promise.resolve(adapter.add(s.currentDate))
           .then(() => {
@@ -922,6 +936,23 @@ export class TimeSliderControl implements IControl, DockController {
     for (const adapter of this._adapters) {
       void Promise.resolve(adapter.update(date)).catch(() => undefined);
     }
+  }
+
+  /**
+   * Records an adapter's per-date data availability and toggles the dock's "no
+   * data" indicator. The badge shows whenever any source reports no data for the
+   * current date (the common case being a single sparse mosaic), and clears once
+   * every reporting source has data again.
+   *
+   * @param id - The reporting source's id
+   * @param available - Whether the current date has data for that source
+   */
+  private _handleDataStatus(id: string, available: boolean): void {
+    const had = this._unavailableSources.size > 0;
+    if (available) this._unavailableSources.delete(id);
+    else this._unavailableSources.add(id);
+    const has = this._unavailableSources.size > 0;
+    if (has !== had) this._view?.syncDataStatus(has);
   }
 
   /**

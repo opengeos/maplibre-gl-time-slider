@@ -348,6 +348,31 @@
   pointer-events: none;
 }
 
+/* "No data for this date" badge, riding beneath the date label on the marker.
+ * Hidden until the current date's source reports it has no data. A warm red
+ * reads on both the light and dark map backgrounds the dock floats over. */
+.ts-no-data {
+  position: absolute;
+  top: 30px;
+  left: 0;
+  transform: translateX(-50%);
+  padding: 1px 6px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  line-height: 1.4;
+  white-space: nowrap;
+  border-radius: 3px;
+  pointer-events: none;
+  display: none;
+}
+
+.ts-no-data.ts-visible {
+  display: block;
+}
+
 /* ----- Right cluster: pills + add-data ----- */
 .ts-right {
   position: relative;
