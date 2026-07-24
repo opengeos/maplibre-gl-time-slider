@@ -463,7 +463,7 @@ export function createLayersPopover(controller: DockController): LayersHandle {
   // (which applies the example's timeline/settings) only updates sections below
   // it, never overwriting selections sitting above. Settings and Timeline
   // follow, with the Layers list last.
-  scroll.append(form, settings.section, timeline.section, layersSection);
+  scroll.append(form.element, settings.section, timeline.section, layersSection);
   popover.append(scroll);
   root.append(toggleBtn, popover);
 
@@ -479,6 +479,9 @@ export function createLayersPopover(controller: DockController): LayersHandle {
     if (opening) {
       timeline.sync();
       settings.sync();
+      // Reflect the loaded source(s) into the add-data form so the panel shows
+      // the current time-slider configuration rather than a generic example.
+      form.syncFromSources();
       // The popover only has measurable dimensions once shown, so place the
       // grip on the free edge now.
       resize.syncSide();
@@ -908,7 +911,7 @@ function buildForm(
   onAdded: () => void,
   onConfigApplied: () => void,
   canSeedExample: () => boolean
-): HTMLElement {
+): { element: HTMLElement; syncFromSources: () => void } {
   const form = document.createElement('div');
   form.className = 'ts-add-form';
 
@@ -1187,6 +1190,57 @@ function buildForm(
     onAdded();
   });
 
+  // Populate the form from an already-loaded source so opening the panel shows
+  // the time slider's current configuration (type + URL + engine/colormap/
+  // rescale/bands) instead of a generic example. Reflects the most recently
+  // added source; the fields stay editable so the user can tweak and re-add.
+  // Values are set directly (no `change` events) so this never triggers the
+  // example-config path or the user-configured guard.
+  const syncFromSources = (): void => {
+    const sources = controller.getSources();
+    if (sources.length === 0) return;
+    const src = sources[sources.length - 1] as SourceSpec & Record<string, unknown>;
+    // Only the five add-form types have editable fields; a custom source has no
+    // form representation, so leave whatever is there untouched.
+    if (!SOURCE_TYPES.some((t) => t.value === src.type)) return;
+    const asStr = (v: unknown): string => (typeof v === 'string' ? v : '');
+    const rescale = Array.isArray(src.rescale) ? (src.rescale as number[]) : null;
+    const bandsStr = Array.isArray(src.bidx) ? (src.bidx as number[]).join(',') : '';
+    typeSelect.value = src.type;
+    nameField.input.value = asStr(src.name);
+    idField.input.value = asStr(src.id);
+    if (src.type === 'cog') {
+      urlField.input.value = asStr(src.url);
+      cmapSelect.value = asStr(src.colormap);
+      rescaleMin.value = rescale ? String(rescale[0]) : '';
+      rescaleMax.value = rescale ? String(rescale[1]) : '';
+      nodataField.input.value = src.nodata != null ? String(src.nodata) : '';
+      bandsField.input.value = bandsStr;
+    } else if (src.type === 'mosaic') {
+      mosaicUrlField.input.value = asStr(src.url);
+      engineField.select.value = src.engine === 'wasm' ? 'wasm' : 'gpu';
+      cmapSelect.value = asStr(src.colormap);
+      rescaleMin.value = rescale ? String(rescale[0]) : '';
+      rescaleMax.value = rescale ? String(rescale[1]) : '';
+      mosaicNodataField.input.value = src.nodata != null ? String(src.nodata) : '';
+      bandsField.input.value = bandsStr;
+    } else if (src.type === 'xyz') {
+      tilesField.input.value = asStr(src.tiles);
+    } else if (src.type === 'geojson') {
+      dataField.input.value = asStr(src.data);
+      timePropField.input.value = asStr(src.timeProperty);
+      const unit = (src.window as { unit?: string } | undefined)?.unit;
+      if (unit) windowField.select.value = unit;
+    } else if (src.type === 'wms') {
+      baseUrlField.input.value = asStr(src.baseUrl);
+      wmsLayersField.input.value = asStr(src.layers);
+    }
+    renderFields();
+  };
+  // Reflect any source that already exists at build time (a restored project or
+  // an example configured before the panel is first opened).
+  syncFromSources();
+
   form.append(title, typeSelect, fieldHost, addBtn);
-  return form;
+  return { element: form, syncFromSources };
 }

@@ -353,6 +353,32 @@ describe('layersPopover', () => {
     popover.destroy();
   });
 
+  it('reflects an existing source into the add-data form on open', () => {
+    const source = {
+      type: 'mosaic',
+      id: 'naip',
+      name: 'NAIP',
+      url: 'https://x/{date:YYYY}.json',
+      engine: 'wasm',
+      bidx: [1, 2, 3],
+    } as unknown as SourceSpec;
+    const popover = createLayersPopover(baseController({ getSources: () => [source] }));
+    document.body.appendChild(popover.root);
+    (popover.root.querySelector('.ts-add-data') as HTMLButtonElement).click();
+
+    const select = popover.root.querySelector('.ts-type-select') as HTMLSelectElement;
+    expect(select.value).toBe('mosaic');
+    const values = Array.from(
+      popover.root.querySelectorAll('.ts-add-form input, .ts-add-form select')
+    ).map((el) => (el as HTMLInputElement | HTMLSelectElement).value);
+    expect(values).toContain('https://x/{date:YYYY}.json');
+    expect(values).toContain('wasm');
+    expect(values).toContain('1,2,3');
+    expect(values).toContain('NAIP');
+
+    popover.destroy();
+  });
+
   it('resizes the popover content height by dragging the vertical grip', () => {
     const popover = createLayersPopover(baseController());
     document.body.appendChild(popover.root);
