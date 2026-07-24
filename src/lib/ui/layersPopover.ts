@@ -283,6 +283,11 @@ function colormapSelect(current?: string): HTMLSelectElement {
 const POPOVER_MIN_WIDTH = 240;
 const POPOVER_MAX_WIDTH = 640;
 
+/** Min popover content height (px); the max is derived from the viewport. */
+const POPOVER_MIN_HEIGHT = 160;
+/** Gap (px) kept between the top of the grown popover and the viewport edge. */
+const POPOVER_TOP_GAP = 24;
+
 /**
  * Makes the popover horizontally resizable via a drag grip. The grip is placed
  * on whichever edge is free to grow (opposite the anchored edge), so it works
@@ -348,6 +353,48 @@ function enablePopoverResize(popover: HTMLElement): { syncSide: () => void } {
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
   });
+
+  // Vertical grip on the top edge. The popover is anchored at its bottom and
+  // grows upward, so dragging the top grip up enlarges the scrollable content
+  // area. It caps the `.ts-popover-scroll` height rather than the popover so the
+  // form/settings/timeline/layers sections get more room before they scroll.
+  const vGrip = document.createElement('div');
+  vGrip.className = 'ts-resize-grip-v';
+  popover.appendChild(vGrip);
+  const scrollArea = (): HTMLElement | null =>
+    popover.querySelector('.ts-popover-scroll');
+
+  let startY = 0;
+  let startHeight = 0;
+
+  const onMoveV = (e: PointerEvent): void => {
+    const area = scrollArea();
+    if (!area) return;
+    const dy = e.clientY - startY;
+    const max = Math.max(POPOVER_MIN_HEIGHT, window.innerHeight - POPOVER_TOP_GAP);
+    const height = Math.min(max, Math.max(POPOVER_MIN_HEIGHT, startHeight - dy));
+    area.style.maxHeight = `${height}px`;
+  };
+
+  const onUpV = (e: PointerEvent): void => {
+    vGrip.releasePointerCapture?.(e.pointerId);
+    window.removeEventListener('pointermove', onMoveV);
+    window.removeEventListener('pointerup', onUpV);
+    document.body.classList.remove('ts-resizing-v');
+  };
+
+  vGrip.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const area = scrollArea();
+    startY = e.clientY;
+    startHeight = area ? area.getBoundingClientRect().height : 0;
+    vGrip.setPointerCapture?.(e.pointerId);
+    document.body.classList.add('ts-resizing-v');
+    window.addEventListener('pointermove', onMoveV);
+    window.addEventListener('pointerup', onUpV);
+  });
+
   return { syncSide };
 }
 
@@ -378,6 +425,17 @@ export function createLayersPopover(controller: DockController): LayersHandle {
   const timeline = buildTimelineSection(controller);
   const settings = buildSettingsSection(controller);
 
+  // Flips once the user edits the Timeline or Settings sections, so switching the
+  // add-form source type stops seeding example timelines over their own values.
+  // Programmatic value updates (an example's `sync()`) set `.value` directly and
+  // do not fire `change`, so this only tracks genuine user edits.
+  let userConfigured = false;
+  const markConfigured = (): void => {
+    userConfigured = true;
+  };
+  timeline.section.addEventListener('change', markConfigured);
+  settings.section.addEventListener('change', markConfigured);
+
   // Layers section: a titled wrapper so the layer cards read as their own group
   // rather than floating between the Settings and Add-data sections.
   const layersSection = document.createElement('div');
@@ -397,7 +455,8 @@ export function createLayersPopover(controller: DockController): LayersHandle {
     () => {
       timeline.sync();
       settings.sync();
-    }
+    },
+    () => !userConfigured && controller.getSources().length === 0
   );
 
   // Section order: the add-data form comes first so that selecting a source
@@ -847,7 +906,8 @@ async function computeGeoJsonBounds(
 function buildForm(
   controller: DockController,
   onAdded: () => void,
-  onConfigApplied: () => void
+  onConfigApplied: () => void,
+  canSeedExample: () => boolean
 ): HTMLElement {
   const form = document.createElement('div');
   form.className = 'ts-add-form';
@@ -1003,12 +1063,13 @@ function buildForm(
   typeSelect.addEventListener('change', () => {
     renderFields();
     // Only seed the example's timeline/settings while the timeline is still a
-    // blank slate. Once any source exists the range, granularity, speed, and
-    // current date are the user's (or a restored project's) own configuration,
-    // and overwriting them with an example's values just to switch the add-form
-    // type would silently discard that. `applyExampleFields` already guards its
-    // text prefills the same way (`!input.value`); this is the missing sibling.
-    if (controller.getSources().length === 0) {
+    // blank slate the user has not touched. Once a source exists, or the user has
+    // entered their own range/granularity/speed/date (or a saved project restored
+    // them), those values are theirs, and overwriting them with an example just
+    // to switch the add-form type would silently discard the user's settings.
+    // `applyExampleFields` already guards its text prefills the same way
+    // (`!input.value`); this is the timeline/settings sibling.
+    if (canSeedExample()) {
       applyExampleConfig(typeSelect.value as SourceSpec['type']);
     }
   });

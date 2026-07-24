@@ -320,6 +320,60 @@ describe('layersPopover', () => {
     popover.destroy();
   });
 
+  it('does not apply an example timeline after the user edits the timeline', () => {
+    const setRange = vi.fn();
+    const setGranularities = vi.fn();
+    const setSpeed = vi.fn();
+    const goTo = vi.fn();
+    const popover = createLayersPopover(
+      baseController({ setRange, setGranularities, setSpeed, goTo })
+    );
+    document.body.appendChild(popover.root);
+
+    // The user enters a start date in the Timeline section (a real change event
+    // that bubbles up to the section, marking the timeline user-configured).
+    const [start] = timelineInputs(popover.root);
+    start.value = '2024-01-01';
+    start.dispatchEvent(new Event('change', { bubbles: true }));
+    setRange.mockClear();
+    setGranularities.mockClear();
+    setSpeed.mockClear();
+    goTo.mockClear();
+
+    // Switching the add-form type must now leave the user's timeline alone even
+    // though no source has been added yet.
+    const select = popover.root.querySelector('.ts-type-select') as HTMLSelectElement;
+    select.value = 'geojson';
+    select.dispatchEvent(new Event('change'));
+    expect(setRange).not.toHaveBeenCalled();
+    expect(setGranularities).not.toHaveBeenCalled();
+    expect(setSpeed).not.toHaveBeenCalled();
+    expect(goTo).not.toHaveBeenCalled();
+
+    popover.destroy();
+  });
+
+  it('resizes the popover content height by dragging the vertical grip', () => {
+    const popover = createLayersPopover(baseController());
+    document.body.appendChild(popover.root);
+    const scroll = popover.root.querySelector('.ts-popover-scroll') as HTMLElement;
+    // Stub the starting height the drag measures from.
+    scroll.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 0, bottom: 300, width: 0, height: 300 }) as DOMRect;
+
+    const vGrip = popover.root.querySelector('.ts-resize-grip-v') as HTMLElement;
+    expect(vGrip).not.toBeNull();
+
+    vGrip.dispatchEvent(new MouseEvent('pointerdown', { clientY: 400, bubbles: true }));
+    // The popover is bottom-anchored and grows upward, so dragging the top grip
+    // up 100px (400 -> 300) enlarges the content area to 300 + 100 = 400px.
+    window.dispatchEvent(new MouseEvent('pointermove', { clientY: 300 }));
+    expect(scroll.style.maxHeight).toBe('400px');
+    window.dispatchEvent(new MouseEvent('pointerup', {}));
+
+    popover.destroy();
+  });
+
   it('includes the COG bands field as bidx when adding a layer', async () => {
     // COG adds fetch the data bounds; stub fetch so the add path is deterministic.
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('no network')));
