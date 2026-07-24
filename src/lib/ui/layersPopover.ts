@@ -1002,7 +1002,15 @@ function buildForm(
   };
   typeSelect.addEventListener('change', () => {
     renderFields();
-    applyExampleConfig(typeSelect.value as SourceSpec['type']);
+    // Only seed the example's timeline/settings while the timeline is still a
+    // blank slate. Once any source exists the range, granularity, speed, and
+    // current date are the user's (or a restored project's) own configuration,
+    // and overwriting them with an example's values just to switch the add-form
+    // type would silently discard that. `applyExampleFields` already guards its
+    // text prefills the same way (`!input.value`); this is the missing sibling.
+    if (controller.getSources().length === 0) {
+      applyExampleConfig(typeSelect.value as SourceSpec['type']);
+    }
   });
   renderFields();
 

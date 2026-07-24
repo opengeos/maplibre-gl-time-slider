@@ -268,7 +268,7 @@ describe('layersPopover', () => {
     popover.destroy();
   });
 
-  it('applies the example timeline/settings when a source type is selected', () => {
+  it('applies the example timeline/settings when a source type is selected on an empty timeline', () => {
     const setRange = vi.fn();
     const setGranularities = vi.fn();
     const setSpeed = vi.fn();
@@ -286,6 +286,36 @@ describe('layersPopover', () => {
     expect(setSpeed).toHaveBeenCalledWith(1000);
     // Every example starts at its start date.
     expect(goTo).toHaveBeenCalledWith(new Date('2015-01-01'));
+
+    popover.destroy();
+  });
+
+  it('does not apply an example timeline when a source already exists', () => {
+    const setRange = vi.fn();
+    const setGranularities = vi.fn();
+    const setSpeed = vi.fn();
+    const goTo = vi.fn();
+    const existing: SourceSpec = { id: 'chla', type: 'mosaic', url: 'https://x/{date:YYYYMMDD}.json' };
+    const popover = createLayersPopover(
+      baseController({
+        getSources: () => [existing],
+        setRange,
+        setGranularities,
+        setSpeed,
+        goTo,
+      })
+    );
+    document.body.appendChild(popover.root);
+    const select = popover.root.querySelector('.ts-type-select') as HTMLSelectElement;
+
+    // Switching the add-form type to pick a second source must not overwrite the
+    // range/granularity/speed/date the existing (or restored) timeline already has.
+    select.value = 'geojson';
+    select.dispatchEvent(new Event('change'));
+    expect(setRange).not.toHaveBeenCalled();
+    expect(setGranularities).not.toHaveBeenCalled();
+    expect(setSpeed).not.toHaveBeenCalled();
+    expect(goTo).not.toHaveBeenCalled();
 
     popover.destroy();
   });
