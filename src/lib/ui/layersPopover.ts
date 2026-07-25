@@ -999,6 +999,9 @@ function buildForm(
     GRANULARITIES.map((g) => ({ value: g, label: g[0].toUpperCase() + g.slice(1) }))
   );
   windowField.select.value = 'day';
+  // When checked, features from previous time steps are kept (accumulated)
+  // instead of being removed as the timeline advances.
+  const cumulativeField = checkboxField('Cumulative (keep past features)');
   const baseUrlField = field('WMS base URL', 'https://.../wms?service=WMS');
   const wmsLayersField = field('WMS layers', 'layer-name');
 
@@ -1025,7 +1028,7 @@ function buildForm(
       bandsField.row,
     ],
     xyz: [tilesField.row],
-    geojson: [dataField.row, timePropField.row, windowField.row],
+    geojson: [dataField.row, timePropField.row, windowField.row, cumulativeField.row],
     wms: [baseUrlField.row, wmsLayersField.row],
     custom: [],
   };
@@ -1128,6 +1131,7 @@ function buildForm(
       dataField.input.value = '';
       timePropField.input.value = '';
       windowField.select.value = 'day';
+      cumulativeField.input.checked = false;
     } else if (type === 'wms') {
       baseUrlField.input.value = '';
       wmsLayersField.input.value = '';
@@ -1216,6 +1220,7 @@ function buildForm(
         data: dataField.input.value,
         timeProperty: timePropField.input.value || 'time',
         window: { unit: windowField.select.value as Granularity, before: 0, after: 1 },
+        cumulative: cumulativeField.input.checked,
       };
     } else if (type === 'wms' && baseUrlField.input.value) {
       spec = {
@@ -1314,6 +1319,7 @@ function buildForm(
       timePropField.input.value = asStr(src.timeProperty);
       const unit = (src.window as { unit?: string } | undefined)?.unit;
       if (unit) windowField.select.value = unit;
+      cumulativeField.input.checked = src.cumulative === true;
     } else if (src.type === 'wms') {
       baseUrlField.input.value = asStr(src.baseUrl);
       wmsLayersField.input.value = asStr(src.layers);

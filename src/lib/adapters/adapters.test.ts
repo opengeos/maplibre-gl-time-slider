@@ -170,6 +170,15 @@ describe('buildTimeFilter', () => {
       ['<', ['to-number', ['get', 'time']], addUnits(d1, 'month', 1).getTime()],
     ]);
   });
+
+  it('drops the lower bound when cumulative so past features accumulate', () => {
+    const filter = buildTimeFilter('time', d1, { unit: 'month' }, true);
+    expect(filter).toEqual([
+      '<',
+      ['to-number', ['get', 'time']],
+      addUnits(d1, 'month', 1).getTime(),
+    ]);
+  });
 });
 
 describe('GeoJsonAdapter', () => {

@@ -48,7 +48,9 @@ const DEFAULT_PAINT: {
 
 /**
  * Builds a MapLibre filter expression that keeps features whose time property
- * falls inside the window `[date - before, date + after)` around the date.
+ * falls inside the window `[date - before, date + after)` around the date. When
+ * `cumulative` is true the lower bound is dropped, so every feature up to the
+ * window's end stays visible (past time steps accumulate rather than clear).
  *
  * The time property is coerced with `to-number`, so values must be epoch
  * milliseconds (or numeric strings).
@@ -56,18 +58,23 @@ const DEFAULT_PAINT: {
  * @param timeProperty - Feature property holding the timestamp
  * @param date - The current timeline date
  * @param window - The time window
+ * @param cumulative - Keep features from previous steps instead of removing them
  * @returns A MapLibre filter expression
  */
 export function buildTimeFilter(
   timeProperty: string,
   date: Date,
-  window: GeoJsonTimeWindow
+  window: GeoJsonTimeWindow,
+  cumulative = false
 ): FilterSpecification {
   const before = window.before ?? 0;
   const after = window.after ?? 1;
-  const lower = addUnits(date, window.unit, -before).getTime();
   const upper = addUnits(date, window.unit, after).getTime();
   const value = ['to-number', ['get', timeProperty]];
+  if (cumulative) {
+    return ['<', value, upper] as unknown as FilterSpecification;
+  }
+  const lower = addUnits(date, window.unit, -before).getTime();
   return ['all', ['>=', value, lower], ['<', value, upper]] as unknown as FilterSpecification;
 }
 
@@ -79,6 +86,7 @@ export function buildTimeFilter(
 export class GeoJsonAdapter extends BaseAdapter {
   readonly spec: GeoJsonSourceSpec;
   private window: GeoJsonTimeWindow;
+  private cumulative: boolean;
   private opacityKey: string;
 
   /**
@@ -89,6 +97,7 @@ export class GeoJsonAdapter extends BaseAdapter {
     super(spec.id!, { ...ctx, beforeId: spec.beforeId ?? ctx.beforeId }, spec.opacity ?? 1);
     this.spec = spec;
     this.window = spec.window ?? DEFAULT_WINDOW;
+    this.cumulative = spec.cumulative ?? false;
     this.opacityKey = GEOMETRY_CONFIG[spec.geometry ?? 'circle'].opacityKey;
   }
 
@@ -112,7 +121,7 @@ export class GeoJsonAdapter extends BaseAdapter {
         type: layerType,
         source: this.id,
         paint,
-        filter: buildTimeFilter(this.spec.timeProperty, date, this.window),
+        filter: buildTimeFilter(this.spec.timeProperty, date, this.window, this.cumulative),
       } as never,
       this.beforeId
     );
@@ -121,7 +130,10 @@ export class GeoJsonAdapter extends BaseAdapter {
   update(date: Date): void {
     this.lastDate = date;
     if (this.map.getLayer?.(this.id)) {
-      this.map.setFilter(this.id, buildTimeFilter(this.spec.timeProperty, date, this.window));
+      this.map.setFilter(
+        this.id,
+        buildTimeFilter(this.spec.timeProperty, date, this.window, this.cumulative)
+      );
     }
   }
 

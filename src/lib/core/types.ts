@@ -314,6 +314,14 @@ export interface GeoJsonSourceSpec extends BaseSourceSpec {
   window?: GeoJsonTimeWindow;
 
   /**
+   * Accumulate features over time instead of showing only the current window.
+   * When true, every feature up to the current window's end stays visible (the
+   * lower bound is dropped), so past time steps are kept rather than removed.
+   * @default false
+   */
+  cumulative?: boolean;
+
+  /**
    * Geometry kind to render.
    * @default 'circle'
    */
