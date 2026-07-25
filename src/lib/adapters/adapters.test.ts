@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createStubMap } from '../../../tests/stubMap';
 import { CogAdapter } from './CogAdapter';
+import { MosaicAdapter } from './MosaicAdapter';
 import { XyzAdapter } from './XyzAdapter';
 import { WmsAdapter } from './WmsAdapter';
 import { GeoJsonAdapter, buildTimeFilter } from './GeoJsonAdapter';
@@ -234,6 +235,25 @@ describe('createAdapter', () => {
     const cog = createAdapter({ type: 'cog', url: 'https://e/x.tif' }, { map });
     expect(cog).toBeInstanceOf(CogAdapter);
     expect(cog.id).toMatch(/^ts-layer-/);
+  });
+
+  it('routes a COG to TiTiler by default and to the LayerManager for gpu/wasm', () => {
+    const { map } = createStubMap();
+    // Default (and explicit titiler) engine → server-side CogAdapter.
+    expect(createAdapter({ type: 'cog', url: 'https://e/x.tif' }, { map })).toBeInstanceOf(
+      CogAdapter
+    );
+    expect(
+      createAdapter({ type: 'cog', url: 'https://e/x.tif', engine: 'titiler' }, { map })
+    ).toBeInstanceOf(CogAdapter);
+    // Client-side engines render the single COG through the MosaicAdapter's
+    // maplibre-gl-raster LayerManager.
+    expect(
+      createAdapter({ type: 'cog', url: 'https://e/x.tif', engine: 'gpu' }, { map })
+    ).toBeInstanceOf(MosaicAdapter);
+    expect(
+      createAdapter({ type: 'cog', url: 'https://e/x.tif', engine: 'wasm' }, { map })
+    ).toBeInstanceOf(MosaicAdapter);
   });
 
   it('resolves custom sources to an inner adapter', async () => {

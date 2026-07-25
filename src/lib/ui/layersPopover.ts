@@ -20,7 +20,7 @@ export interface LayersHandle {
  * Source types selectable in the add-data form.
  */
 const SOURCE_TYPES: { value: SourceSpec['type']; label: string }[] = [
-  { value: 'cog', label: 'COG (TiTiler)' },
+  { value: 'cog', label: 'COG' },
   { value: 'mosaic', label: 'Mosaic (STAC / MosaicJSON)' },
   { value: 'xyz', label: 'XYZ / WMTS' },
   { value: 'geojson', label: 'GeoJSON' },
@@ -938,8 +938,17 @@ function buildForm(
 
   // Per-type fields.
   const urlField = field('COG URL', 'https://.../{date:YYYY-MM-DD}.tif');
-  // TiTiler endpoint that serves the COG's tiles. Pre-filled with the same
-  // default the adapter uses so the box shows a usable value out of the box.
+  // COG rendering engine: TiTiler (server tiling, the default), or the client-
+  // side GPU (deck.gl) / WASM (cog-tiler-wasm) engines. See CogSourceSpec.engine.
+  const cogEngineField = selectField('Engine', [
+    { value: 'gpu', label: 'GPU (deck.gl)' },
+    { value: 'wasm', label: 'WASM (cog-tiler-wasm)' },
+    { value: 'titiler', label: 'TiTiler (server)' },
+  ]);
+  cogEngineField.select.value = 'titiler';
+  // TiTiler endpoint that serves the COG's tiles (used by the TiTiler engine).
+  // Pre-filled with the same default the adapter uses so the box shows a usable
+  // value out of the box.
   const endpointField = field('TiTiler endpoint', TITILER_DEFAULT_ENDPOINT);
   endpointField.input.value = TITILER_DEFAULT_ENDPOINT;
   // Mosaic manifest URL (MosaicJSON or STAC FeatureCollection), one per date.
@@ -994,7 +1003,15 @@ function buildForm(
   const wmsLayersField = field('WMS layers', 'layer-name');
 
   const groups: Record<SourceSpec['type'], HTMLElement[]> = {
-    cog: [urlField.row, cmapRow, rescaleRow, nodataField.row, bandsField.row, endpointField.row],
+    cog: [
+      urlField.row,
+      cogEngineField.row,
+      cmapRow,
+      rescaleRow,
+      nodataField.row,
+      bandsField.row,
+      endpointField.row,
+    ],
     // Shares the colormap/rescale/bands rows with COG (only one group is shown
     // at a time, so re-parenting the same nodes is safe). NoData is its own
     // field: a mosaic renders client-side, so it takes the renderer's
@@ -1090,6 +1107,7 @@ function buildForm(
     idField.input.value = '';
     if (type === 'cog') {
       urlField.input.value = '';
+      cogEngineField.select.value = 'titiler';
       endpointField.input.value = TITILER_DEFAULT_ENDPOINT;
       cmapSelect.value = '';
       rescaleMin.value = '';
@@ -1169,6 +1187,7 @@ function buildForm(
         id,
         name,
         url: urlField.input.value,
+        engine: cogEngineField.select.value as 'titiler' | 'gpu' | 'wasm',
         endpoint: endpointField.input.value.trim() || undefined,
         colormap: cmapSelect.value || undefined,
         rescale: readRescale(),
@@ -1272,6 +1291,8 @@ function buildForm(
     idField.input.value = asStr(src.id);
     if (src.type === 'cog') {
       urlField.input.value = asUrl(src.url);
+      cogEngineField.select.value =
+        src.engine === 'gpu' || src.engine === 'wasm' ? src.engine : 'titiler';
       endpointField.input.value = asStr(src.endpoint) || TITILER_DEFAULT_ENDPOINT;
       cmapSelect.value = asStr(src.colormap);
       rescaleMin.value = rescale ? String(rescale[0]) : '';
