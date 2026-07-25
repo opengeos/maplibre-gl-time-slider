@@ -460,7 +460,7 @@ export function createLayersPopover(controller: DockController): LayersHandle {
       timeline.sync();
       settings.sync();
     },
-    () => !userConfigured && controller.getSources().length === 0
+    () => !userConfigured
   );
 
   // Section order: the add-data form comes first so that selecting a source
@@ -1327,14 +1327,21 @@ function buildForm(
   typeSelect.addEventListener('change', () => {
     const type = typeSelect.value as SourceSpec['type'];
     const tied = tiedSource(type);
+    const edited = editedTypes.has(type);
     if (tied) {
       reflectSource(tied);
-    } else if (editedTypes.has(type)) {
+    } else if (edited) {
       showFields(type);
     } else {
       resetTypeToDefault(type);
     }
-    if (canSeedExample()) applyExampleConfig(type);
+    // Reset the timeline/settings (start/end/interval/granularity/speed) to the
+    // type's example on the same rule as the fields: only for an untied, unedited
+    // type, and never over a timeline the user has manually configured
+    // (`canSeedExample` encodes that guard).
+    if (!tied && !edited && canSeedExample()) {
+      applyExampleConfig(type);
+    }
   });
 
   // Reflect any source that already exists at build time (a restored project or

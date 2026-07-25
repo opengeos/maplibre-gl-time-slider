@@ -343,7 +343,7 @@ describe('layersPopover', () => {
     popover.destroy();
   });
 
-  it('does not apply an example timeline when a source already exists', () => {
+  it('resets settings for an untied type but not for the tied type', () => {
     const setRange = vi.fn();
     const setGranularities = vi.fn();
     const setSpeed = vi.fn();
@@ -361,9 +361,20 @@ describe('layersPopover', () => {
     document.body.appendChild(popover.root);
     const select = popover.root.querySelector('.ts-type-select') as HTMLSelectElement;
 
-    // Switching the add-form type to pick a second source must not overwrite the
-    // range/granularity/speed/date the existing (or restored) timeline already has.
+    // Switching to an UNTIED type resets the timeline/settings to that type's
+    // example (the user has not manually configured the timeline).
     select.value = 'geojson';
+    select.dispatchEvent(new Event('change'));
+    expect(setRange).toHaveBeenCalled();
+    expect(setGranularities).toHaveBeenCalled();
+
+    // Switching to the TIED type (mosaic) reflects that source instead of
+    // resetting, so it must not overwrite the timeline with an example.
+    setRange.mockClear();
+    setGranularities.mockClear();
+    setSpeed.mockClear();
+    goTo.mockClear();
+    select.value = 'mosaic';
     select.dispatchEvent(new Event('change'));
     expect(setRange).not.toHaveBeenCalled();
     expect(setGranularities).not.toHaveBeenCalled();
