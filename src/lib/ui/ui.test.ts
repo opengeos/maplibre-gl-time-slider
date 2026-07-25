@@ -257,13 +257,66 @@ describe('layersPopover', () => {
     expect(filled).toContain('gibs.earthdata.nasa.gov');
     expect(filled).toContain('{z}/{y}/{x}');
 
-    // An edited value is preserved when switching types away and back.
+    // A user edit (a real input event) is preserved when switching types away
+    // and back.
     tiles().value = 'https://custom/{z}/{x}/{y}.png';
+    tiles().dispatchEvent(new Event('input', { bubbles: true }));
     select.value = 'geojson';
     select.dispatchEvent(new Event('change'));
     select.value = 'xyz';
     select.dispatchEvent(new Event('change'));
     expect(tiles().value).toBe('https://custom/{z}/{x}/{y}.png');
+
+    popover.destroy();
+  });
+
+  it('resets an untouched, untied type to its defaults on switch', () => {
+    const popover = createLayersPopover(baseController());
+    document.body.appendChild(popover.root);
+    const select = popover.root.querySelector('.ts-type-select') as HTMLSelectElement;
+    const tiles = (): HTMLInputElement =>
+      popover.root.querySelectorAll(
+        '.ts-add-form .ts-form-fields .ts-field input'
+      )[2] as HTMLInputElement;
+
+    select.value = 'xyz';
+    select.dispatchEvent(new Event('change'));
+    // Edit the value but WITHOUT a real input event: the panel does not learn of
+    // it, so it is treated as untouched.
+    tiles().value = 'https://custom/{z}/{x}/{y}.png';
+    select.value = 'geojson';
+    select.dispatchEvent(new Event('change'));
+    select.value = 'xyz';
+    select.dispatchEvent(new Event('change'));
+    // Switching back resets to the xyz default example rather than keeping the
+    // silently-set value.
+    expect(tiles().value).toContain('gibs.earthdata.nasa.gov');
+
+    popover.destroy();
+  });
+
+  it('reflects a tied source of the selected type instead of its defaults', () => {
+    const source = {
+      type: 'xyz',
+      id: 'x1',
+      name: 'Tiles',
+      tiles: 'https://tied/{z}/{x}/{y}.png',
+    } as unknown as SourceSpec;
+    const popover = createLayersPopover(baseController({ getSources: () => [source] }));
+    document.body.appendChild(popover.root);
+    const select = popover.root.querySelector('.ts-type-select') as HTMLSelectElement;
+    const tiles = (): HTMLInputElement =>
+      popover.root.querySelectorAll(
+        '.ts-add-form .ts-form-fields .ts-field input'
+      )[2] as HTMLInputElement;
+
+    // Switch away and back to xyz: because an xyz source is tied to the slider,
+    // the form reflects it rather than resetting to the example default.
+    select.value = 'geojson';
+    select.dispatchEvent(new Event('change'));
+    select.value = 'xyz';
+    select.dispatchEvent(new Event('change'));
+    expect(tiles().value).toBe('https://tied/{z}/{x}/{y}.png');
 
     popover.destroy();
   });

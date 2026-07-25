@@ -1016,6 +1016,17 @@ function buildForm(
   const fieldHost = document.createElement('div');
   fieldHost.className = 'ts-form-fields';
 
+  // Source types the user has typed/selected into. Switching to a type the user
+  // has edited keeps their input; switching to an untouched, untied type resets
+  // to that type's defaults. Programmatic value writes (reflect/reset/example)
+  // do not fire input/change, so only genuine edits land here.
+  const editedTypes = new Set<SourceSpec['type']>();
+  const markEdited = (): void => {
+    editedTypes.add(typeSelect.value as SourceSpec['type']);
+  };
+  fieldHost.addEventListener('input', markEdited);
+  fieldHost.addEventListener('change', markEdited);
+
   // Pre-fill the example field values for the selected type, but only when the
   // primary URL field is still empty so a user's own input is never overwritten
   // when they switch types back and forth.
@@ -1070,24 +1081,51 @@ function buildForm(
   const showFields = (type: SourceSpec['type']): void => {
     fieldHost.replaceChildren(nameField.row, idField.row, ...groups[type]);
   };
+  // Clear a type's own fields to empty (name/id/URL/etc.) so a following example
+  // prefill fully repopulates them with the type's defaults rather than leaving
+  // stale values from a previous type or reflected source. The type-change
+  // handler below decides when this runs; see `resetTypeToDefault`.
+  const clearTypeFields = (type: SourceSpec['type']): void => {
+    nameField.input.value = '';
+    idField.input.value = '';
+    if (type === 'cog') {
+      urlField.input.value = '';
+      endpointField.input.value = TITILER_DEFAULT_ENDPOINT;
+      cmapSelect.value = '';
+      rescaleMin.value = '';
+      rescaleMax.value = '';
+      nodataField.input.value = '';
+      bandsField.input.value = '';
+    } else if (type === 'mosaic') {
+      mosaicUrlField.input.value = '';
+      engineField.select.value = 'gpu';
+      cmapSelect.value = '';
+      rescaleMin.value = '';
+      rescaleMax.value = '';
+      mosaicNodataField.input.value = '';
+      bandsField.input.value = '';
+    } else if (type === 'xyz') {
+      tilesField.input.value = '';
+    } else if (type === 'geojson') {
+      dataField.input.value = '';
+      timePropField.input.value = '';
+      windowField.select.value = 'day';
+    } else if (type === 'wms') {
+      baseUrlField.input.value = '';
+      wmsLayersField.input.value = '';
+    }
+  };
+  // Reset a type's fields to its default example values.
+  const resetTypeToDefault = (type: SourceSpec['type']): void => {
+    clearTypeFields(type);
+    applyExampleFields(type);
+    showFields(type);
+  };
   const renderFields = (): void => {
     const type = typeSelect.value as SourceSpec['type'];
     applyExampleFields(type);
     showFields(type);
   };
-  typeSelect.addEventListener('change', () => {
-    renderFields();
-    // Only seed the example's timeline/settings while the timeline is still a
-    // blank slate the user has not touched. Once a source exists, or the user has
-    // entered their own range/granularity/speed/date (or a saved project restored
-    // them), those values are theirs, and overwriting them with an example just
-    // to switch the add-form type would silently discard the user's settings.
-    // `applyExampleFields` already guards its text prefills the same way
-    // (`!input.value`); this is the timeline/settings sibling.
-    if (canSeedExample()) {
-      applyExampleConfig(typeSelect.value as SourceSpec['type']);
-    }
-  });
   renderFields();
 
   const readRescale = (): [number, number] | undefined => {
@@ -1203,16 +1241,12 @@ function buildForm(
     onAdded();
   });
 
-  // Populate the form from an already-loaded source so opening the panel shows
-  // the time slider's current configuration (type + URL + engine/colormap/
-  // rescale/bands) instead of a generic example. Reflects the most recently
-  // added source; the fields stay editable so the user can tweak and re-add.
-  // Values are set directly (no `change` events) so this never triggers the
-  // example-config path or the user-configured guard.
-  const syncFromSources = (): void => {
-    const sources = controller.getSources();
-    if (sources.length === 0) return;
-    const src = sources[sources.length - 1] as SourceSpec & Record<string, unknown>;
+  // Populate the form from a specific loaded source so the panel shows the time
+  // slider's current configuration (type + URL + engine/colormap/rescale/bands)
+  // instead of a generic example. The fields stay editable so the user can tweak
+  // and re-add. Values are set directly (no `change` events) so this never
+  // triggers the example-config path or the user-configured guard.
+  const reflectSource = (src: SourceSpec & Record<string, unknown>): void => {
     // Only the five add-form types have editable fields; a custom source has no
     // form representation, so leave whatever is there untouched.
     if (!SOURCE_TYPES.some((t) => t.value === src.type)) return;
@@ -1268,6 +1302,41 @@ function buildForm(
     // resolver function and the URL field is left blank).
     showFields(src.type);
   };
+
+  /** The most recently added source of a type, or undefined. */
+  const tiedSource = (type: SourceSpec['type']): (SourceSpec & Record<string, unknown>) | undefined => {
+    const matches = controller.getSources().filter((s) => s.type === type);
+    return matches.length > 0
+      ? (matches[matches.length - 1] as SourceSpec & Record<string, unknown>)
+      : undefined;
+  };
+
+  // Reflect the most recently added source (any type) into the form. Used when
+  // the panel opens so it shows the current configuration.
+  const syncFromSources = (): void => {
+    const sources = controller.getSources();
+    if (sources.length > 0) {
+      reflectSource(sources[sources.length - 1] as SourceSpec & Record<string, unknown>);
+    }
+  };
+
+  // Switching the source type: reflect a source of that type if one is tied to
+  // the slider, keep the user's own edits if they have made any, otherwise reset
+  // to the type's default example values. Then, for a still-pristine timeline,
+  // seed the example timeline/settings (never over a configured/restored one).
+  typeSelect.addEventListener('change', () => {
+    const type = typeSelect.value as SourceSpec['type'];
+    const tied = tiedSource(type);
+    if (tied) {
+      reflectSource(tied);
+    } else if (editedTypes.has(type)) {
+      showFields(type);
+    } else {
+      resetTypeToDefault(type);
+    }
+    if (canSeedExample()) applyExampleConfig(type);
+  });
+
   // Reflect any source that already exists at build time (a restored project or
   // an example configured before the panel is first opened).
   syncFromSources();
