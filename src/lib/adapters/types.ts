@@ -14,6 +14,18 @@ export interface AdapterContext {
    * ID of an existing map layer to insert managed layers before.
    */
   beforeId?: string;
+
+  /**
+   * Reports whether the source has data for the date it just rendered. Adapters
+   * whose data is sparse across the timeline (e.g. a mosaic with missing dates)
+   * call this with `false` when a date's URL is inaccessible and `true` once a
+   * date loads, so the control can surface a "no data" indicator instead of the
+   * step failing silently or flooding the console.
+   *
+   * @param id - The reporting source's id
+   * @param available - Whether the current date has data
+   */
+  onDataStatus?: (id: string, available: boolean) => void;
 }
 
 /**

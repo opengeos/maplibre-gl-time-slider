@@ -169,8 +169,11 @@ describe('TimeSliderControl playback', () => {
 
 describe('TimeSliderControl sources', () => {
   it('adds a source, renders it, and dispatches date changes', () => {
+    // An XYZ source renders synchronously (no availability probe), so the source
+    // is added and re-tiled within the synchronous call. COG-specific rendering
+    // and its per-date availability probe are covered in adapters.test.ts.
     const { control, stub } = mount({
-      sources: [{ type: 'cog', id: 'c', url: 'https://e/{date:YYYY-MM-DD}.tif' }],
+      sources: [{ type: 'xyz', id: 'c', tiles: 'https://t/{z}/{x}/{y}.png?d={date:YYYY-MM-DD}' }],
     });
     expect(control.getSources()).toHaveLength(1);
     expect(stub.map.addSource).toHaveBeenCalled();

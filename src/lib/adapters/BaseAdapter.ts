@@ -15,6 +15,8 @@ export abstract class BaseAdapter implements SourceAdapter {
   protected beforeId?: string;
   protected opacity: number;
   protected lastDate?: Date;
+  /** Reports per-date data availability up to the control; see AdapterContext. */
+  protected onDataStatus?: (id: string, available: boolean) => void;
 
   /**
    * @param id - Stable id used for the source and layer
@@ -25,6 +27,7 @@ export abstract class BaseAdapter implements SourceAdapter {
     this.id = id;
     this.map = ctx.map;
     this.beforeId = ctx.beforeId;
+    this.onDataStatus = ctx.onDataStatus;
     this.opacity = clamp(opacity, 0, 1);
   }
 
@@ -84,6 +87,9 @@ export abstract class RasterAdapter extends BaseAdapter {
   /** Optional `[west, south, east, north]` extent limiting tile requests. */
   protected bounds?: [number, number, number, number];
   private requestSeq = 0;
+  /** Set by remove(); guards async render() continuations so a probe/tile
+   * resolution that finishes after removal cannot re-add the layer. */
+  private removed = false;
 
   /**
    * Builds the tile URL template for a given date.
@@ -92,6 +98,28 @@ export abstract class RasterAdapter extends BaseAdapter {
    * @returns A tile URL with `{z}/{x}/{y}` placeholders (or a promise of one)
    */
   protected abstract resolveTiles(date: Date): string | Promise<string>;
+
+  /**
+   * Whether the source has data for a date. Subclasses whose data is sparse
+   * across the timeline (e.g. a COG series with missing dates) override this to
+   * probe the date; the default treats every date as available (XYZ/WMS tile
+   * services cover the whole timeline).
+   *
+   * @param date - The timeline date
+   * @returns Whether the date has data (or a promise of it)
+   */
+  protected probeAvailability(_date: Date): boolean | Promise<boolean> {
+    return true;
+  }
+
+  /**
+   * Removes the managed layer + source so a date with no data shows nothing
+   * instead of the previous frame. The next available date re-adds them.
+   */
+  protected clearLayer(): void {
+    if (this.map.getLayer?.(this.id)) this.map.removeLayer(this.id);
+    if (this.map.getSource?.(this.id)) this.map.removeSource(this.id);
+  }
 
   /**
    * Creates the raster source + layer if missing, otherwise updates its tiles.
@@ -123,16 +151,36 @@ export abstract class RasterAdapter extends BaseAdapter {
   }
 
   /**
-   * Resolves tiles for a date and applies them, ignoring the result if a newer
-   * request started meanwhile (prevents stale async renders during scrubbing).
+   * Probes availability, then resolves tiles for a date and applies them,
+   * ignoring the result if a newer request started meanwhile (prevents stale
+   * async renders during scrubbing). A date with no data clears the layer and
+   * reports "no data" so the dock can show an indicator instead of the map
+   * lingering on the previous frame.
    */
   private render(date: Date): void | Promise<void> {
     this.lastDate = date;
     const seq = ++this.requestSeq;
-    return whenResolved(this.resolveTiles(date), (tiles) => {
-      if (seq !== this.requestSeq) return;
-      this.applyTiles(tiles);
+    return whenResolved(this.probeAvailability(date), (available) => {
+      if (this.removed || seq !== this.requestSeq) return undefined;
+      if (!available) {
+        this.clearLayer();
+        this.onDataStatus?.(this.id, false);
+        return undefined;
+      }
+      return whenResolved(this.resolveTiles(date), (tiles) => {
+        if (this.removed || seq !== this.requestSeq) return;
+        this.applyTiles(tiles);
+        this.onDataStatus?.(this.id, true);
+      });
     });
+  }
+
+  remove(): void {
+    // Mark removed and invalidate any in-flight render so a probe/tile
+    // resolution that resolves after this cannot resurrect the layer.
+    this.removed = true;
+    this.requestSeq++;
+    super.remove();
   }
 
   add(date: Date): void | Promise<void> {

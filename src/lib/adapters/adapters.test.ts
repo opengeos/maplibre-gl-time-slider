@@ -1,6 +1,7 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createStubMap } from '../../../tests/stubMap';
 import { CogAdapter } from './CogAdapter';
+import { MosaicAdapter } from './MosaicAdapter';
 import { XyzAdapter } from './XyzAdapter';
 import { WmsAdapter } from './WmsAdapter';
 import { GeoJsonAdapter, buildTimeFilter } from './GeoJsonAdapter';
@@ -10,8 +11,19 @@ import { addUnits } from '../time/granularity';
 const d1 = new Date('2024-04-18T00:00:00Z');
 const d2 = new Date('2024-04-19T00:00:00Z');
 
+// The COG adapter probes TiTiler for each date's availability; stub it "found"
+// by default so tile-building tests don't touch the network.
+function stubTiTilerFound(): void {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }));
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe('CogAdapter', () => {
   it('builds a TiTiler raster source/layer and re-tiles on update', async () => {
+    stubTiTilerFound();
     const { map, sources } = createStubMap();
     const adapter = new CogAdapter(
       {
@@ -40,11 +52,54 @@ describe('CogAdapter', () => {
   });
 
   it('re-renders the current date when colormap changes via setProperty', async () => {
+    stubTiTilerFound();
     const { map, sources } = createStubMap();
     const adapter = new CogAdapter({ type: 'cog', id: 'c2', url: 'https://e/x.tif' }, { map });
     await adapter.add(d1);
     await adapter.setProperty({ colormap: 'viridis' } as never);
     expect(sources.get('c2')!.setTiles.mock.calls[0][0][0]).toContain('colormap_name=viridis');
+  });
+
+  it('does not resurrect the layer when removed while the probe is in flight', async () => {
+    let settle: (v: { ok: boolean; json: () => Promise<unknown> }) => void = () => {};
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => new Promise((resolve) => (settle = resolve)))
+    );
+    const { map } = createStubMap();
+    const adapter = new CogAdapter(
+      { type: 'cog', id: 'c-race', url: 'https://e/x.tif' },
+      { map }
+    );
+    const pending = adapter.add(d1); // probe is in flight
+    adapter.remove(); // removed before the probe resolves
+    settle({ ok: true, json: async () => ({}) });
+    await pending;
+    // The stale probe continuation must not re-add the removed layer/source.
+    expect(map.addSource).not.toHaveBeenCalled();
+    expect(map.addLayer).not.toHaveBeenCalled();
+  });
+
+  it('signals no data and skips tiling when TiTiler cannot find the date COG', async () => {
+    // TiTiler responds non-OK (the COG for this date does not exist).
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 404 }));
+    const { map } = createStubMap();
+    const status: boolean[] = [];
+    const adapter = new CogAdapter(
+      { type: 'cog', id: 'c-missing', url: 'https://e/{YYYY}-{MM}-{DD}.tif' },
+      { map, onDataStatus: (_id, available) => status.push(available) }
+    );
+    await adapter.add(d1);
+
+    // No raster source was added for the missing date, and "no data" was reported.
+    expect(map.addSource).not.toHaveBeenCalled();
+    expect(status).toEqual([false]);
+
+    // Scrubbing back to the same missing date does not re-probe (cached).
+    const fetchSpy = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchSpy.mockClear();
+    await adapter.update(d1);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
 
@@ -135,6 +190,15 @@ describe('buildTimeFilter', () => {
       ['<', ['to-number', ['get', 'time']], addUnits(d1, 'month', 1).getTime()],
     ]);
   });
+
+  it('drops the lower bound when cumulative so past features accumulate', () => {
+    const filter = buildTimeFilter('time', d1, { unit: 'month' }, true);
+    expect(filter).toEqual([
+      '<',
+      ['to-number', ['get', 'time']],
+      addUnits(d1, 'month', 1).getTime(),
+    ]);
+  });
 });
 
 describe('GeoJsonAdapter', () => {
@@ -200,6 +264,25 @@ describe('createAdapter', () => {
     const cog = createAdapter({ type: 'cog', url: 'https://e/x.tif' }, { map });
     expect(cog).toBeInstanceOf(CogAdapter);
     expect(cog.id).toMatch(/^ts-layer-/);
+  });
+
+  it('routes a COG to TiTiler by default and to the LayerManager for gpu/wasm', () => {
+    const { map } = createStubMap();
+    // Default (and explicit titiler) engine → server-side CogAdapter.
+    expect(createAdapter({ type: 'cog', url: 'https://e/x.tif' }, { map })).toBeInstanceOf(
+      CogAdapter
+    );
+    expect(
+      createAdapter({ type: 'cog', url: 'https://e/x.tif', engine: 'titiler' }, { map })
+    ).toBeInstanceOf(CogAdapter);
+    // Client-side engines render the single COG through the MosaicAdapter's
+    // maplibre-gl-raster LayerManager.
+    expect(
+      createAdapter({ type: 'cog', url: 'https://e/x.tif', engine: 'gpu' }, { map })
+    ).toBeInstanceOf(MosaicAdapter);
+    expect(
+      createAdapter({ type: 'cog', url: 'https://e/x.tif', engine: 'wasm' }, { map })
+    ).toBeInstanceOf(MosaicAdapter);
   });
 
   it('resolves custom sources to an inner adapter', async () => {

@@ -13,6 +13,8 @@ export interface AxisHandle {
   renderTicks(): void;
   /** Reposition the marker to the current date. */
   setMarker(): void;
+  /** Show or hide the "no data for this date" badge on the marker. */
+  setDataStatus(unavailable: boolean): void;
   /** Remove global listeners. */
   destroy(): void;
 }
@@ -51,9 +53,13 @@ export function createAxis(controller: DockController): AxisHandle {
   // The current-date label rides with the marker, beneath the pointer.
   const markerLabel = document.createElement('div');
   markerLabel.className = 'ts-marker-label';
+  // Shown beneath the date label when the current date's source has no data.
+  const noDataBadge = document.createElement('div');
+  noDataBadge.className = 'ts-no-data';
+  noDataBadge.textContent = 'No data';
   const knob = document.createElement('div');
   knob.className = 'ts-marker-knob';
-  marker.append(knob, markerLabel);
+  marker.append(knob, markerLabel, noDataBadge);
 
   track.appendChild(ticksLayer);
   track.appendChild(marker);
@@ -170,6 +176,12 @@ export function createAxis(controller: DockController): AxisHandle {
     // Keep the label inside the track near the edges instead of centering it.
     const shift = fraction <= 0.1 ? '0' : fraction >= 0.9 ? '-100%' : '-50%';
     markerLabel.style.transform = `translateX(${shift})`;
+    // The badge rides beneath the date label, so it follows the same edge shift.
+    noDataBadge.style.transform = `translateX(${shift})`;
+  };
+
+  const setDataStatus = (unavailable: boolean): void => {
+    noDataBadge.classList.toggle('ts-visible', unavailable);
   };
 
   const destroy = (): void => {
@@ -183,5 +195,5 @@ export function createAxis(controller: DockController): AxisHandle {
     window.removeEventListener('touchend', onUp);
   };
 
-  return { root, renderTicks, setMarker, destroy };
+  return { root, renderTicks, setMarker, setDataStatus, destroy };
 }

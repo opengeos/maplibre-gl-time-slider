@@ -2,7 +2,7 @@ import type { CogSourceSpec, Granularity, SourceSpec } from '../core/types';
 import { formatDate } from '../template/dateFormat';
 import { resolveUrl } from '../template/urlTemplate';
 import { GRANULARITIES } from '../time/granularity';
-import { getTiTilerBounds } from '../utils/titiler';
+import { DEFAULT_TITILER_ENDPOINT, getTiTilerBounds } from '../utils/titiler';
 import type { DockController } from './types';
 
 /**
@@ -20,12 +20,16 @@ export interface LayersHandle {
  * Source types selectable in the add-data form.
  */
 const SOURCE_TYPES: { value: SourceSpec['type']; label: string }[] = [
-  { value: 'cog', label: 'COG (TiTiler)' },
+  { value: 'cog', label: 'COG' },
   { value: 'mosaic', label: 'Mosaic (STAC / MosaicJSON)' },
   { value: 'xyz', label: 'XYZ / WMTS' },
   { value: 'geojson', label: 'GeoJSON' },
   { value: 'wms', label: 'WMS-Time' },
 ];
+
+/** Default TiTiler endpoint the COG form's endpoint field ships with, shared
+ * with the adapters so the two never drift. */
+const TITILER_DEFAULT_ENDPOINT = DEFAULT_TITILER_ENDPOINT;
 
 /**
  * Colormaps offered in the colormap dropdown. This mirrors the full named set
@@ -283,6 +287,11 @@ function colormapSelect(current?: string): HTMLSelectElement {
 const POPOVER_MIN_WIDTH = 240;
 const POPOVER_MAX_WIDTH = 640;
 
+/** Min popover content height (px); the max is derived from the viewport. */
+const POPOVER_MIN_HEIGHT = 160;
+/** Gap (px) kept between the top of the grown popover and the viewport edge. */
+const POPOVER_TOP_GAP = 24;
+
 /**
  * Makes the popover horizontally resizable via a drag grip. The grip is placed
  * on whichever edge is free to grow (opposite the anchored edge), so it works
@@ -348,6 +357,48 @@ function enablePopoverResize(popover: HTMLElement): { syncSide: () => void } {
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
   });
+
+  // Vertical grip on the top edge. The popover is anchored at its bottom and
+  // grows upward, so dragging the top grip up enlarges the scrollable content
+  // area. It caps the `.ts-popover-scroll` height rather than the popover so the
+  // form/settings/timeline/layers sections get more room before they scroll.
+  const vGrip = document.createElement('div');
+  vGrip.className = 'ts-resize-grip-v';
+  popover.appendChild(vGrip);
+  const scrollArea = (): HTMLElement | null =>
+    popover.querySelector('.ts-popover-scroll');
+
+  let startY = 0;
+  let startHeight = 0;
+
+  const onMoveV = (e: PointerEvent): void => {
+    const area = scrollArea();
+    if (!area) return;
+    const dy = e.clientY - startY;
+    const max = Math.max(POPOVER_MIN_HEIGHT, window.innerHeight - POPOVER_TOP_GAP);
+    const height = Math.min(max, Math.max(POPOVER_MIN_HEIGHT, startHeight - dy));
+    area.style.maxHeight = `${height}px`;
+  };
+
+  const onUpV = (e: PointerEvent): void => {
+    vGrip.releasePointerCapture?.(e.pointerId);
+    window.removeEventListener('pointermove', onMoveV);
+    window.removeEventListener('pointerup', onUpV);
+    document.body.classList.remove('ts-resizing-v');
+  };
+
+  vGrip.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const area = scrollArea();
+    startY = e.clientY;
+    startHeight = area ? area.getBoundingClientRect().height : 0;
+    vGrip.setPointerCapture?.(e.pointerId);
+    document.body.classList.add('ts-resizing-v');
+    window.addEventListener('pointermove', onMoveV);
+    window.addEventListener('pointerup', onUpV);
+  });
+
   return { syncSide };
 }
 
@@ -378,6 +429,17 @@ export function createLayersPopover(controller: DockController): LayersHandle {
   const timeline = buildTimelineSection(controller);
   const settings = buildSettingsSection(controller);
 
+  // Flips once the user edits the Timeline or Settings sections, so switching the
+  // add-form source type stops seeding example timelines over their own values.
+  // Programmatic value updates (an example's `sync()`) set `.value` directly and
+  // do not fire `change`, so this only tracks genuine user edits.
+  let userConfigured = false;
+  const markConfigured = (): void => {
+    userConfigured = true;
+  };
+  timeline.section.addEventListener('change', markConfigured);
+  settings.section.addEventListener('change', markConfigured);
+
   // Layers section: a titled wrapper so the layer cards read as their own group
   // rather than floating between the Settings and Add-data sections.
   const layersSection = document.createElement('div');
@@ -397,14 +459,15 @@ export function createLayersPopover(controller: DockController): LayersHandle {
     () => {
       timeline.sync();
       settings.sync();
-    }
+    },
+    () => !userConfigured
   );
 
   // Section order: the add-data form comes first so that selecting a source
   // (which applies the example's timeline/settings) only updates sections below
   // it, never overwriting selections sitting above. Settings and Timeline
   // follow, with the Layers list last.
-  scroll.append(form, settings.section, timeline.section, layersSection);
+  scroll.append(form.element, settings.section, timeline.section, layersSection);
   popover.append(scroll);
   root.append(toggleBtn, popover);
 
@@ -420,6 +483,9 @@ export function createLayersPopover(controller: DockController): LayersHandle {
     if (opening) {
       timeline.sync();
       settings.sync();
+      // Reflect the loaded source(s) into the add-data form so the panel shows
+      // the current time-slider configuration rather than a generic example.
+      form.syncFromSources();
       // The popover only has measurable dimensions once shown, so place the
       // grip on the free edge now.
       resize.syncSide();
@@ -847,8 +913,9 @@ async function computeGeoJsonBounds(
 function buildForm(
   controller: DockController,
   onAdded: () => void,
-  onConfigApplied: () => void
-): HTMLElement {
+  onConfigApplied: () => void,
+  canSeedExample: () => boolean
+): { element: HTMLElement; syncFromSources: () => void } {
   const form = document.createElement('div');
   form.className = 'ts-add-form';
 
@@ -871,6 +938,19 @@ function buildForm(
 
   // Per-type fields.
   const urlField = field('COG URL', 'https://.../{date:YYYY-MM-DD}.tif');
+  // COG rendering engine: TiTiler (server tiling, the default), or the client-
+  // side GPU (deck.gl) / WASM (cog-tiler-wasm) engines. See CogSourceSpec.engine.
+  const cogEngineField = selectField('Engine', [
+    { value: 'gpu', label: 'GPU (deck.gl)' },
+    { value: 'wasm', label: 'WASM (cog-tiler-wasm)' },
+    { value: 'titiler', label: 'TiTiler (server)' },
+  ]);
+  cogEngineField.select.value = 'gpu';
+  // TiTiler endpoint that serves the COG's tiles (used by the TiTiler engine).
+  // Pre-filled with the same default the adapter uses so the box shows a usable
+  // value out of the box.
+  const endpointField = field('TiTiler endpoint', TITILER_DEFAULT_ENDPOINT);
+  endpointField.input.value = TITILER_DEFAULT_ENDPOINT;
   // Mosaic manifest URL (MosaicJSON or STAC FeatureCollection), one per date.
   const mosaicUrlField = field('Mosaic URL', 'https://.../{date:YYYY}/{date:MM}/mosaic.json');
   // Mosaic rendering engine: GPU (deck.gl, mercator only) or WASM
@@ -919,11 +999,22 @@ function buildForm(
     GRANULARITIES.map((g) => ({ value: g, label: g[0].toUpperCase() + g.slice(1) }))
   );
   windowField.select.value = 'day';
+  // When checked, features from previous time steps are kept (accumulated)
+  // instead of being removed as the timeline advances.
+  const cumulativeField = checkboxField('Cumulative (keep past features)');
   const baseUrlField = field('WMS base URL', 'https://.../wms?service=WMS');
   const wmsLayersField = field('WMS layers', 'layer-name');
 
   const groups: Record<SourceSpec['type'], HTMLElement[]> = {
-    cog: [urlField.row, cmapRow, rescaleRow, nodataField.row, bandsField.row],
+    cog: [
+      urlField.row,
+      cogEngineField.row,
+      cmapRow,
+      rescaleRow,
+      nodataField.row,
+      bandsField.row,
+      endpointField.row,
+    ],
     // Shares the colormap/rescale/bands rows with COG (only one group is shown
     // at a time, so re-parenting the same nodes is safe). NoData is its own
     // field: a mosaic renders client-side, so it takes the renderer's
@@ -937,13 +1028,24 @@ function buildForm(
       bandsField.row,
     ],
     xyz: [tilesField.row],
-    geojson: [dataField.row, timePropField.row, windowField.row],
+    geojson: [dataField.row, timePropField.row, windowField.row, cumulativeField.row],
     wms: [baseUrlField.row, wmsLayersField.row],
     custom: [],
   };
 
   const fieldHost = document.createElement('div');
   fieldHost.className = 'ts-form-fields';
+
+  // Source types the user has typed/selected into. Switching to a type the user
+  // has edited keeps their input; switching to an untouched, untied type resets
+  // to that type's defaults. Programmatic value writes (reflect/reset/example)
+  // do not fire input/change, so only genuine edits land here.
+  const editedTypes = new Set<SourceSpec['type']>();
+  const markEdited = (): void => {
+    editedTypes.add(typeSelect.value as SourceSpec['type']);
+  };
+  fieldHost.addEventListener('input', markEdited);
+  fieldHost.addEventListener('change', markEdited);
 
   // Pre-fill the example field values for the selected type, but only when the
   // primary URL field is still empty so a user's own input is never overwritten
@@ -995,23 +1097,57 @@ function buildForm(
     onConfigApplied();
   };
 
+  // Swap the visible field group for a type without touching field values.
+  const showFields = (type: SourceSpec['type']): void => {
+    fieldHost.replaceChildren(nameField.row, idField.row, ...groups[type]);
+  };
+  // Clear a type's own fields to empty (name/id/URL/etc.) so a following example
+  // prefill fully repopulates them with the type's defaults rather than leaving
+  // stale values from a previous type or reflected source. The type-change
+  // handler below decides when this runs; see `resetTypeToDefault`.
+  const clearTypeFields = (type: SourceSpec['type']): void => {
+    nameField.input.value = '';
+    idField.input.value = '';
+    if (type === 'cog') {
+      urlField.input.value = '';
+      cogEngineField.select.value = 'gpu';
+      endpointField.input.value = TITILER_DEFAULT_ENDPOINT;
+      cmapSelect.value = '';
+      rescaleMin.value = '';
+      rescaleMax.value = '';
+      nodataField.input.value = '';
+      bandsField.input.value = '';
+    } else if (type === 'mosaic') {
+      mosaicUrlField.input.value = '';
+      engineField.select.value = 'gpu';
+      cmapSelect.value = '';
+      rescaleMin.value = '';
+      rescaleMax.value = '';
+      mosaicNodataField.input.value = '';
+      bandsField.input.value = '';
+    } else if (type === 'xyz') {
+      tilesField.input.value = '';
+    } else if (type === 'geojson') {
+      dataField.input.value = '';
+      timePropField.input.value = '';
+      windowField.select.value = 'day';
+      cumulativeField.input.checked = false;
+    } else if (type === 'wms') {
+      baseUrlField.input.value = '';
+      wmsLayersField.input.value = '';
+    }
+  };
+  // Reset a type's fields to its default example values.
+  const resetTypeToDefault = (type: SourceSpec['type']): void => {
+    clearTypeFields(type);
+    applyExampleFields(type);
+    showFields(type);
+  };
   const renderFields = (): void => {
     const type = typeSelect.value as SourceSpec['type'];
     applyExampleFields(type);
-    fieldHost.replaceChildren(nameField.row, idField.row, ...groups[type]);
+    showFields(type);
   };
-  typeSelect.addEventListener('change', () => {
-    renderFields();
-    // Only seed the example's timeline/settings while the timeline is still a
-    // blank slate. Once any source exists the range, granularity, speed, and
-    // current date are the user's (or a restored project's) own configuration,
-    // and overwriting them with an example's values just to switch the add-form
-    // type would silently discard that. `applyExampleFields` already guards its
-    // text prefills the same way (`!input.value`); this is the missing sibling.
-    if (controller.getSources().length === 0) {
-      applyExampleConfig(typeSelect.value as SourceSpec['type']);
-    }
-  });
   renderFields();
 
   const readRescale = (): [number, number] | undefined => {
@@ -1055,6 +1191,8 @@ function buildForm(
         id,
         name,
         url: urlField.input.value,
+        engine: cogEngineField.select.value as 'titiler' | 'gpu' | 'wasm',
+        endpoint: endpointField.input.value.trim() || undefined,
         colormap: cmapSelect.value || undefined,
         rescale: readRescale(),
         nodata: nodataField.input.value || undefined,
@@ -1082,6 +1220,7 @@ function buildForm(
         data: dataField.input.value,
         timeProperty: timePropField.input.value || 'time',
         window: { unit: windowField.select.value as Granularity, before: 0, after: 1 },
+        cumulative: cumulativeField.input.checked,
       };
     } else if (type === 'wms' && baseUrlField.input.value) {
       spec = {
@@ -1126,6 +1265,124 @@ function buildForm(
     onAdded();
   });
 
+  // Populate the form from a specific loaded source so the panel shows the time
+  // slider's current configuration (type + URL + engine/colormap/rescale/bands)
+  // instead of a generic example. The fields stay editable so the user can tweak
+  // and re-add. Values are set directly (no `change` events) so this never
+  // triggers the example-config path or the user-configured guard.
+  const reflectSource = (src: SourceSpec & Record<string, unknown>): void => {
+    // Only the five add-form types have editable fields; a custom source has no
+    // form representation, so leave whatever is there untouched.
+    if (!SOURCE_TYPES.some((t) => t.value === src.type)) return;
+    const asStr = (v: unknown): string => (typeof v === 'string' ? v : '');
+    // A URL-bearing field may be a string template (shown verbatim so its
+    // `{date:...}` tokens stay visible and editable) or a resolver function
+    // (which has no editable template, so resolve it for the current date to
+    // show a concrete URL rather than an empty box).
+    const asUrl = (v: unknown, apply: (url: string) => void): string => {
+      if (typeof v === 'string') return v;
+      if (typeof v !== 'function') return '';
+      try {
+        const resolved = resolveUrl(v as never, controller.getState().currentDate);
+        if (typeof resolved === 'string') return resolved;
+        // An async resolver: fill the field once the promise settles rather than
+        // leaving it blank; swallow a rejection so it never surfaces unhandled.
+        void Promise.resolve(resolved)
+          .then((u) => {
+            if (typeof u === 'string') apply(u);
+          })
+          .catch(() => undefined);
+        return '';
+      } catch {
+        return '';
+      }
+    };
+    const rescale = Array.isArray(src.rescale) ? (src.rescale as number[]) : null;
+    const bandsStr = Array.isArray(src.bidx) ? (src.bidx as number[]).join(',') : '';
+    typeSelect.value = src.type;
+    nameField.input.value = asStr(src.name);
+    idField.input.value = asStr(src.id);
+    if (src.type === 'cog') {
+      urlField.input.value = asUrl(src.url, (u) => (urlField.input.value = u));
+      cogEngineField.select.value =
+        src.engine === 'gpu' || src.engine === 'wasm' ? src.engine : 'titiler';
+      endpointField.input.value = asStr(src.endpoint) || TITILER_DEFAULT_ENDPOINT;
+      cmapSelect.value = asStr(src.colormap);
+      rescaleMin.value = rescale ? String(rescale[0]) : '';
+      rescaleMax.value = rescale ? String(rescale[1]) : '';
+      nodataField.input.value = src.nodata != null ? String(src.nodata) : '';
+      bandsField.input.value = bandsStr;
+    } else if (src.type === 'mosaic') {
+      mosaicUrlField.input.value = asUrl(src.url, (u) => (mosaicUrlField.input.value = u));
+      engineField.select.value = src.engine === 'wasm' ? 'wasm' : 'gpu';
+      cmapSelect.value = asStr(src.colormap);
+      rescaleMin.value = rescale ? String(rescale[0]) : '';
+      rescaleMax.value = rescale ? String(rescale[1]) : '';
+      mosaicNodataField.input.value = src.nodata != null ? String(src.nodata) : '';
+      bandsField.input.value = bandsStr;
+    } else if (src.type === 'xyz') {
+      tilesField.input.value = asUrl(src.tiles, (u) => (tilesField.input.value = u));
+    } else if (src.type === 'geojson') {
+      dataField.input.value = asUrl(src.data, (u) => (dataField.input.value = u));
+      timePropField.input.value = asStr(src.timeProperty);
+      const unit = (src.window as { unit?: string } | undefined)?.unit;
+      if (unit) windowField.select.value = unit;
+      cumulativeField.input.checked = src.cumulative === true;
+    } else if (src.type === 'wms') {
+      baseUrlField.input.value = asStr(src.baseUrl);
+      wmsLayersField.input.value = asStr(src.layers);
+    }
+    // Show the matching field group without re-running the example prefill,
+    // which would clobber the values just set (e.g. when the source URL is a
+    // resolver function and the URL field is left blank).
+    showFields(src.type);
+  };
+
+  /** The most recently added source of a type, or undefined. */
+  const tiedSource = (type: SourceSpec['type']): (SourceSpec & Record<string, unknown>) | undefined => {
+    const matches = controller.getSources().filter((s) => s.type === type);
+    return matches.length > 0
+      ? (matches[matches.length - 1] as SourceSpec & Record<string, unknown>)
+      : undefined;
+  };
+
+  // Reflect the most recently added source (any type) into the form. Used when
+  // the panel opens so it shows the current configuration.
+  const syncFromSources = (): void => {
+    const sources = controller.getSources();
+    if (sources.length > 0) {
+      reflectSource(sources[sources.length - 1] as SourceSpec & Record<string, unknown>);
+    }
+  };
+
+  // Switching the source type: reflect a source of that type if one is tied to
+  // the slider, keep the user's own edits if they have made any, otherwise reset
+  // to the type's default example values. Then, for a still-pristine timeline,
+  // seed the example timeline/settings (never over a configured/restored one).
+  typeSelect.addEventListener('change', () => {
+    const type = typeSelect.value as SourceSpec['type'];
+    const tied = tiedSource(type);
+    const edited = editedTypes.has(type);
+    if (tied) {
+      reflectSource(tied);
+    } else if (edited) {
+      showFields(type);
+    } else {
+      resetTypeToDefault(type);
+    }
+    // Reset the timeline/settings (start/end/interval/granularity/speed) to the
+    // type's example on the same rule as the fields: only for an untied, unedited
+    // type, and never over a timeline the user has manually configured
+    // (`canSeedExample` encodes that guard).
+    if (!tied && !edited && canSeedExample()) {
+      applyExampleConfig(type);
+    }
+  });
+
+  // Reflect any source that already exists at build time (a restored project or
+  // an example configured before the panel is first opened).
+  syncFromSources();
+
   form.append(title, typeSelect, fieldHost, addBtn);
-  return form;
+  return { element: form, syncFromSources };
 }

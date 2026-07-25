@@ -82,7 +82,25 @@ export interface CogSourceSpec extends BaseSourceSpec {
   url: UrlInput;
 
   /**
-   * TiTiler endpoint URL.
+   * Rendering engine for the COG.
+   *
+   * - `'titiler'` (default) — a TiTiler server tiles the COG; nothing is fetched
+   *   client-side beyond the tiles. Uses {@link endpoint}.
+   * - `'gpu'` — the deck.gl GPU pipeline reads the COG in-browser (forces a
+   *   mercator projection, like every deck.gl overlay). Needs the optional peer
+   *   `maplibre-gl-raster`.
+   * - `'wasm'` — the `cog-tiler-wasm` engine composites tiles in-browser and
+   *   serves them as a MapLibre raster source (works in globe too).
+   *
+   * The `gpu`/`wasm` engines fetch the COG directly, so the COG host must allow
+   * cross-origin reads; `titiler` sidesteps that by tiling server-side.
+   *
+   * @default 'titiler'
+   */
+  engine?: 'titiler' | 'gpu' | 'wasm';
+
+  /**
+   * TiTiler endpoint URL (used by the `titiler` engine).
    * @default 'https://titiler.d2s.org'
    */
   endpoint?: string;
@@ -294,6 +312,14 @@ export interface GeoJsonSourceSpec extends BaseSourceSpec {
    * @default { unit: granularity, before: 0, after: 1 }
    */
   window?: GeoJsonTimeWindow;
+
+  /**
+   * Accumulate features over time instead of showing only the current window.
+   * When true, every feature up to the current window's end stays visible (the
+   * lower bound is dropped), so past time steps are kept rather than removed.
+   * @default false
+   */
+  cumulative?: boolean;
 
   /**
    * Geometry kind to render.

@@ -1,4 +1,9 @@
-import type { CustomSourceSpec, ResolvedSourceSpec, SourceSpec } from '../core/types';
+import type {
+  CustomSourceSpec,
+  MosaicSourceSpec,
+  ResolvedSourceSpec,
+  SourceSpec,
+} from '../core/types';
 import { clamp, generateId } from '../utils/helpers';
 import { BaseAdapter } from './BaseAdapter';
 import { CogAdapter } from './CogAdapter';
@@ -22,6 +27,18 @@ function createResolvedAdapter(
 ): SourceAdapter {
   switch (spec.type) {
     case 'cog':
+      // The `gpu`/`wasm` engines render a single COG client-side through the
+      // same `maplibre-gl-raster` LayerManager the mosaic uses (it reads a COG
+      // header directly), so route them to the MosaicAdapter with the COG URL.
+      // The default `titiler` engine tiles server-side via the CogAdapter.
+      if (spec.engine === 'gpu' || spec.engine === 'wasm') {
+        return new MosaicAdapter(
+          { ...spec, type: 'mosaic', engine: spec.engine } as unknown as MosaicSourceSpec & {
+            id: string;
+          },
+          ctx
+        );
+      }
       return new CogAdapter(spec, ctx);
     case 'mosaic':
       return new MosaicAdapter(spec, ctx);

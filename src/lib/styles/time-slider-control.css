@@ -348,6 +348,31 @@
   pointer-events: none;
 }
 
+/* "No data for this date" badge, riding beneath the date label on the marker.
+ * Hidden until the current date's source reports it has no data. A warm red
+ * reads on both the light and dark map backgrounds the dock floats over. */
+.ts-no-data {
+  position: absolute;
+  top: 30px;
+  left: 0;
+  transform: translateX(-50%);
+  padding: 1px 6px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  line-height: 1.4;
+  white-space: nowrap;
+  border-radius: 3px;
+  pointer-events: none;
+  display: none;
+}
+
+.ts-no-data.ts-visible {
+  display: block;
+}
+
 /* ----- Right cluster: pills + add-data ----- */
 .ts-right {
   position: relative;
@@ -473,9 +498,46 @@
   background: var(--ts-accent);
 }
 
+/* Drag handle for resizing the popover height. Sits on the top edge (the
+ * popover is anchored at its bottom and grows upward), inset from the corners so
+ * the width grips keep those edges. */
+.ts-resize-grip-v {
+  position: absolute;
+  top: -2px;
+  left: 12px;
+  right: 12px;
+  height: 10px;
+  cursor: ns-resize;
+  z-index: 6;
+  touch-action: none;
+}
+
+/* Subtle visual affordance: a horizontal accent line that brightens on hover. */
+.ts-resize-grip-v::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: 3px;
+  height: 3px;
+  width: 32px;
+  border-radius: 3px;
+  background: var(--ts-border);
+  transition: background 0.15s ease;
+}
+
+.ts-resize-grip-v:hover::before {
+  background: var(--ts-accent);
+}
+
 /* While dragging, suppress text selection and force the resize cursor. */
 body.ts-resizing {
   cursor: ew-resize;
+  user-select: none;
+}
+
+body.ts-resizing-v {
+  cursor: ns-resize;
   user-select: none;
 }
 

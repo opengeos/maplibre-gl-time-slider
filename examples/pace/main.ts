@@ -36,6 +36,10 @@ map.on('load', () => {
     sources: [
       {
         type: 'cog',
+        // Rendered server-side via TiTiler: GitHub release assets do not send
+        // CORS headers, so the client-side GPU/WASM engines cannot fetch the COG
+        // directly.
+        engine: 'titiler',
         id: 'pace-chla',
         name: 'PACE Chlorophyll-a',
         url: 'https://github.com/opengeos/pace-data/releases/download/chla/chla_{date:YYYY-MM-DD}.tif',

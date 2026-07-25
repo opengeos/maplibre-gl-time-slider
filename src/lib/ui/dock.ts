@@ -80,6 +80,9 @@ export function createDockView(controller: DockController, options: DockOptions 
     refreshLayers() {
       layers.refresh();
     },
+    syncDataStatus(unavailable: boolean) {
+      axis.setDataStatus(unavailable);
+    },
     destroy() {
       axis.destroy();
       layers.destroy();

@@ -46,6 +46,7 @@ map.on('load', async () => {
     sources: [
       {
         type: 'cog',
+        engine: 'gpu',
         id: 'opera-displacement',
         name: 'OPERA Displacement',
         url: cogUrl, // resolver function (fixed reference date + variable end date)

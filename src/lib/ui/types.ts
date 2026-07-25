@@ -89,6 +89,8 @@ export interface DockView {
   syncRange(): void;
   /** Rebuild the layers list in the popover. */
   refreshLayers(): void;
+  /** Toggle the "no data for this date" indicator on the timeline marker. */
+  syncDataStatus(unavailable: boolean): void;
   /** Detach listeners and remove the dock from the DOM. */
   destroy(): void;
 }

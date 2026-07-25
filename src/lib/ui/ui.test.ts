@@ -257,13 +257,66 @@ describe('layersPopover', () => {
     expect(filled).toContain('gibs.earthdata.nasa.gov');
     expect(filled).toContain('{z}/{y}/{x}');
 
-    // An edited value is preserved when switching types away and back.
+    // A user edit (a real input event) is preserved when switching types away
+    // and back.
     tiles().value = 'https://custom/{z}/{x}/{y}.png';
+    tiles().dispatchEvent(new Event('input', { bubbles: true }));
     select.value = 'geojson';
     select.dispatchEvent(new Event('change'));
     select.value = 'xyz';
     select.dispatchEvent(new Event('change'));
     expect(tiles().value).toBe('https://custom/{z}/{x}/{y}.png');
+
+    popover.destroy();
+  });
+
+  it('resets an untouched, untied type to its defaults on switch', () => {
+    const popover = createLayersPopover(baseController());
+    document.body.appendChild(popover.root);
+    const select = popover.root.querySelector('.ts-type-select') as HTMLSelectElement;
+    const tiles = (): HTMLInputElement =>
+      popover.root.querySelectorAll(
+        '.ts-add-form .ts-form-fields .ts-field input'
+      )[2] as HTMLInputElement;
+
+    select.value = 'xyz';
+    select.dispatchEvent(new Event('change'));
+    // Edit the value but WITHOUT a real input event: the panel does not learn of
+    // it, so it is treated as untouched.
+    tiles().value = 'https://custom/{z}/{x}/{y}.png';
+    select.value = 'geojson';
+    select.dispatchEvent(new Event('change'));
+    select.value = 'xyz';
+    select.dispatchEvent(new Event('change'));
+    // Switching back resets to the xyz default example rather than keeping the
+    // silently-set value.
+    expect(tiles().value).toContain('gibs.earthdata.nasa.gov');
+
+    popover.destroy();
+  });
+
+  it('reflects a tied source of the selected type instead of its defaults', () => {
+    const source = {
+      type: 'xyz',
+      id: 'x1',
+      name: 'Tiles',
+      tiles: 'https://tied/{z}/{x}/{y}.png',
+    } as unknown as SourceSpec;
+    const popover = createLayersPopover(baseController({ getSources: () => [source] }));
+    document.body.appendChild(popover.root);
+    const select = popover.root.querySelector('.ts-type-select') as HTMLSelectElement;
+    const tiles = (): HTMLInputElement =>
+      popover.root.querySelectorAll(
+        '.ts-add-form .ts-form-fields .ts-field input'
+      )[2] as HTMLInputElement;
+
+    // Switch away and back to xyz: because an xyz source is tied to the slider,
+    // the form reflects it rather than resetting to the example default.
+    select.value = 'geojson';
+    select.dispatchEvent(new Event('change'));
+    select.value = 'xyz';
+    select.dispatchEvent(new Event('change'));
+    expect(tiles().value).toBe('https://tied/{z}/{x}/{y}.png');
 
     popover.destroy();
   });
@@ -290,7 +343,7 @@ describe('layersPopover', () => {
     popover.destroy();
   });
 
-  it('does not apply an example timeline when a source already exists', () => {
+  it('resets settings for an untied type but not for the tied type', () => {
     const setRange = vi.fn();
     const setGranularities = vi.fn();
     const setSpeed = vi.fn();
@@ -308,14 +361,105 @@ describe('layersPopover', () => {
     document.body.appendChild(popover.root);
     const select = popover.root.querySelector('.ts-type-select') as HTMLSelectElement;
 
-    // Switching the add-form type to pick a second source must not overwrite the
-    // range/granularity/speed/date the existing (or restored) timeline already has.
+    // Switching to an UNTIED type resets the timeline/settings to that type's
+    // example (the user has not manually configured the timeline).
+    select.value = 'geojson';
+    select.dispatchEvent(new Event('change'));
+    expect(setRange).toHaveBeenCalled();
+    expect(setGranularities).toHaveBeenCalled();
+
+    // Switching to the TIED type (mosaic) reflects that source instead of
+    // resetting, so it must not overwrite the timeline with an example.
+    setRange.mockClear();
+    setGranularities.mockClear();
+    setSpeed.mockClear();
+    goTo.mockClear();
+    select.value = 'mosaic';
+    select.dispatchEvent(new Event('change'));
+    expect(setRange).not.toHaveBeenCalled();
+    expect(setGranularities).not.toHaveBeenCalled();
+    expect(setSpeed).not.toHaveBeenCalled();
+    expect(goTo).not.toHaveBeenCalled();
+
+    popover.destroy();
+  });
+
+  it('does not apply an example timeline after the user edits the timeline', () => {
+    const setRange = vi.fn();
+    const setGranularities = vi.fn();
+    const setSpeed = vi.fn();
+    const goTo = vi.fn();
+    const popover = createLayersPopover(
+      baseController({ setRange, setGranularities, setSpeed, goTo })
+    );
+    document.body.appendChild(popover.root);
+
+    // The user enters a start date in the Timeline section (a real change event
+    // that bubbles up to the section, marking the timeline user-configured).
+    const [start] = timelineInputs(popover.root);
+    start.value = '2024-01-01';
+    start.dispatchEvent(new Event('change', { bubbles: true }));
+    setRange.mockClear();
+    setGranularities.mockClear();
+    setSpeed.mockClear();
+    goTo.mockClear();
+
+    // Switching the add-form type must now leave the user's timeline alone even
+    // though no source has been added yet.
+    const select = popover.root.querySelector('.ts-type-select') as HTMLSelectElement;
     select.value = 'geojson';
     select.dispatchEvent(new Event('change'));
     expect(setRange).not.toHaveBeenCalled();
     expect(setGranularities).not.toHaveBeenCalled();
     expect(setSpeed).not.toHaveBeenCalled();
     expect(goTo).not.toHaveBeenCalled();
+
+    popover.destroy();
+  });
+
+  it('reflects an existing source into the add-data form on open', () => {
+    const source = {
+      type: 'mosaic',
+      id: 'naip',
+      name: 'NAIP',
+      url: 'https://x/{date:YYYY}.json',
+      engine: 'wasm',
+      bidx: [1, 2, 3],
+    } as unknown as SourceSpec;
+    const popover = createLayersPopover(baseController({ getSources: () => [source] }));
+    document.body.appendChild(popover.root);
+    (popover.root.querySelector('.ts-add-data') as HTMLButtonElement).click();
+
+    const select = popover.root.querySelector('.ts-type-select') as HTMLSelectElement;
+    expect(select.value).toBe('mosaic');
+    const values = Array.from(
+      popover.root.querySelectorAll('.ts-add-form input, .ts-add-form select')
+    ).map((el) => (el as HTMLInputElement | HTMLSelectElement).value);
+    expect(values).toContain('https://x/{date:YYYY}.json');
+    expect(values).toContain('wasm');
+    expect(values).toContain('1,2,3');
+    expect(values).toContain('NAIP');
+
+    popover.destroy();
+  });
+
+  it('resizes the popover content height by dragging the vertical grip', () => {
+    const popover = createLayersPopover(baseController());
+    document.body.appendChild(popover.root);
+    const scroll = popover.root.querySelector('.ts-popover-scroll') as HTMLElement;
+    // Stub the starting height the drag measures from.
+    scroll.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 0, bottom: 300, width: 0, height: 300 }) as DOMRect;
+
+    const vGrip = popover.root.querySelector('.ts-resize-grip-v') as HTMLElement;
+    expect(vGrip).not.toBeNull();
+
+    vGrip.dispatchEvent(new MouseEvent('pointerdown', { clientY: 400, bubbles: true }));
+    // The popover is bottom-anchored and grows upward, so dragging the top grip
+    // up 100px (400 -> 300) enlarges the content area to 300 + 100 = 400px.
+    window.dispatchEvent(new MouseEvent('pointermove', { clientY: 300 }));
+    expect(scroll.style.maxHeight).toBe('400px');
+    window.dispatchEvent(new MouseEvent('pointerup', {}));
 
     popover.destroy();
   });
@@ -331,9 +475,42 @@ describe('layersPopover', () => {
     // COG is the default type; its example (Landsat) pre-fills url + bands 1,2,3.
     (popover.root.querySelector('.ts-add-submit') as HTMLButtonElement).click();
     await vi.waitFor(() => expect(addSource).toHaveBeenCalledTimes(1));
-    const spec = addSource.mock.calls[0][0] as { bidx?: number[]; url?: string };
+    const spec = addSource.mock.calls[0][0] as {
+      bidx?: number[];
+      url?: string;
+      engine?: string;
+      endpoint?: string;
+    };
     expect(spec.url).toContain('landsat_ts');
     expect(spec.bidx).toEqual([1, 2, 3]);
+    // The COG form defaults to the GPU engine and ships the default TiTiler
+    // endpoint.
+    expect(spec.engine).toBe('gpu');
+    expect(spec.endpoint).toBe('https://titiler.d2s.org');
+
+    popover.destroy();
+  });
+
+  it('reflects a COG source engine and endpoint into the form on open', () => {
+    const source = {
+      type: 'cog',
+      id: 'c',
+      name: 'COG',
+      url: 'https://x/{date:YYYY}.tif',
+      engine: 'titiler',
+      endpoint: 'https://my.titiler.example',
+    } as unknown as SourceSpec;
+    const popover = createLayersPopover(baseController({ getSources: () => [source] }));
+    document.body.appendChild(popover.root);
+    (popover.root.querySelector('.ts-add-data') as HTMLButtonElement).click();
+
+    const select = popover.root.querySelector('.ts-type-select') as HTMLSelectElement;
+    expect(select.value).toBe('cog');
+    const values = Array.from(
+      popover.root.querySelectorAll('.ts-add-form input, .ts-add-form select')
+    ).map((el) => (el as HTMLInputElement | HTMLSelectElement).value);
+    expect(values).toContain('https://my.titiler.example');
+    expect(values).toContain('titiler');
 
     popover.destroy();
   });

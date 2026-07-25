@@ -116,6 +116,9 @@ export class MosaicAdapter extends BaseAdapter {
   private fitted = false;
   /** Whether the map has been forced to mercator for this source yet. */
   private mercatorEnsured = false;
+  /** Manifest URLs known to be inaccessible (a date with no data), so scrubbing
+   * back over a gap reuses the result instead of re-fetching and re-logging. */
+  private readonly missingUrls = new Set<string>();
 
   /**
    * @param spec - The mosaic source specification (must carry an `id`).
@@ -233,6 +236,16 @@ export class MosaicAdapter extends BaseAdapter {
     const url = await resolveUrl(this.spec.url, date);
     if (this.removed || url === this.currentUrl) return;
     const seq = ++this.requestSeq;
+
+    // A date whose manifest we already found inaccessible has no data: clear the
+    // stale mosaic, signal it, and skip the load rather than re-fetching (which
+    // would re-log a 404 every time the user scrubs back across the gap).
+    if (this.missingUrls.has(url)) {
+      this.clearCurrent();
+      this.onDataStatus?.(this.id, false);
+      return;
+    }
+
     const manager = await this.ensureManager();
     if (this.removed || seq !== this.requestSeq) return;
 
@@ -247,12 +260,23 @@ export class MosaicAdapter extends BaseAdapter {
         beforeId: this.beforeId,
       });
     } catch (err) {
-      // Drop the layer we optimistically created and keep the previous mosaic on
-      // screen rather than throwing out of a scrub. Surface the reason (a failed
-      // manifest fetch, a CORS block, or the WASM engine not being installed /
-      // pre-bundled) so a blank map is diagnosable instead of silent.
-      if (!this.removed && manager.getLayer(nextId)) manager.removeRaster(nextId);
-      console.error(`[time-slider] mosaic failed to load: ${url}`, err);
+      if (this.removed || seq !== this.requestSeq) {
+        if (manager.getLayer(nextId)) manager.removeRaster(nextId);
+        return;
+      }
+      // A missing manifest is the expected case for a date with no data (sparse
+      // coverage), not an error: clear the stale mosaic so the map shows nothing
+      // for this date (rather than lingering on the previous frame), remember the
+      // URL so scrubbing back does not re-fetch it, and signal "no data" so the
+      // dock shows an indicator. Log the reason once per URL at debug volume
+      // (hidden from the default console) so a genuine misconfig — a CORS block
+      // or the WASM engine not being installed — stays diagnosable without
+      // flooding the console on every step across a gap.
+      if (manager.getLayer(nextId)) manager.removeRaster(nextId);
+      this.missingUrls.add(url);
+      this.clearCurrent();
+      this.onDataStatus?.(this.id, false);
+      console.debug(`[time-slider] no data for ${url} (skipping)`, err);
       return;
     }
     // A newer date won the race, or we were torn down, while the manifest
@@ -266,6 +290,21 @@ export class MosaicAdapter extends BaseAdapter {
     this.currentUrl = url;
     this.fitted = true;
     if (previousId && manager.getLayer(previousId)) manager.removeRaster(previousId);
+    // The date loaded: clear any prior "no data" signal for this source.
+    this.onDataStatus?.(this.id, true);
+  }
+
+  /**
+   * Removes the on-screen mosaic layer (if any) so a date with no data shows
+   * nothing instead of the previous frame, and resets the current-URL guard so a
+   * later valid date reloads from scratch.
+   */
+  private clearCurrent(): void {
+    if (this.manager && this.rasterId && this.manager.getLayer(this.rasterId)) {
+      this.manager.removeRaster(this.rasterId);
+    }
+    this.rasterId = null;
+    this.currentUrl = null;
   }
 
   add(date: Date): Promise<void> {

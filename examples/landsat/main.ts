@@ -61,6 +61,10 @@ map.on('load', async () => {
     sources: [
       {
         type: 'cog',
+        // Rendered server-side via TiTiler: the source.coop host does not send
+        // CORS headers, so the client-side GPU/WASM engines cannot fetch the COG
+        // directly.
+        engine: 'titiler',
         id: 'landsat-ts',
         name: 'Landsat Annual Composite',
         url: COG_URL,
