@@ -945,7 +945,7 @@ function buildForm(
     { value: 'wasm', label: 'WASM (cog-tiler-wasm)' },
     { value: 'titiler', label: 'TiTiler (server)' },
   ]);
-  cogEngineField.select.value = 'titiler';
+  cogEngineField.select.value = 'gpu';
   // TiTiler endpoint that serves the COG's tiles (used by the TiTiler engine).
   // Pre-filled with the same default the adapter uses so the box shows a usable
   // value out of the box.
@@ -1107,7 +1107,7 @@ function buildForm(
     idField.input.value = '';
     if (type === 'cog') {
       urlField.input.value = '';
-      cogEngineField.select.value = 'titiler';
+      cogEngineField.select.value = 'gpu';
       endpointField.input.value = TITILER_DEFAULT_ENDPOINT;
       cmapSelect.value = '';
       rescaleMin.value = '';
