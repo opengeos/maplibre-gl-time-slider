@@ -87,6 +87,9 @@ export abstract class RasterAdapter extends BaseAdapter {
   /** Optional `[west, south, east, north]` extent limiting tile requests. */
   protected bounds?: [number, number, number, number];
   private requestSeq = 0;
+  /** Set by remove(); guards async render() continuations so a probe/tile
+   * resolution that finishes after removal cannot re-add the layer. */
+  private removed = false;
 
   /**
    * Builds the tile URL template for a given date.
@@ -158,18 +161,26 @@ export abstract class RasterAdapter extends BaseAdapter {
     this.lastDate = date;
     const seq = ++this.requestSeq;
     return whenResolved(this.probeAvailability(date), (available) => {
-      if (seq !== this.requestSeq) return undefined;
+      if (this.removed || seq !== this.requestSeq) return undefined;
       if (!available) {
         this.clearLayer();
         this.onDataStatus?.(this.id, false);
         return undefined;
       }
       return whenResolved(this.resolveTiles(date), (tiles) => {
-        if (seq !== this.requestSeq) return;
+        if (this.removed || seq !== this.requestSeq) return;
         this.applyTiles(tiles);
         this.onDataStatus?.(this.id, true);
       });
     });
+  }
+
+  remove(): void {
+    // Mark removed and invalidate any in-flight render so a probe/tile
+    // resolution that resolves after this cannot resurrect the layer.
+    this.removed = true;
+    this.requestSeq++;
+    super.remove();
   }
 
   add(date: Date): void | Promise<void> {

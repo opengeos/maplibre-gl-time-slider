@@ -60,6 +60,26 @@ describe('CogAdapter', () => {
     expect(sources.get('c2')!.setTiles.mock.calls[0][0][0]).toContain('colormap_name=viridis');
   });
 
+  it('does not resurrect the layer when removed while the probe is in flight', async () => {
+    let settle: (v: { ok: boolean; json: () => Promise<unknown> }) => void = () => {};
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => new Promise((resolve) => (settle = resolve)))
+    );
+    const { map } = createStubMap();
+    const adapter = new CogAdapter(
+      { type: 'cog', id: 'c-race', url: 'https://e/x.tif' },
+      { map }
+    );
+    const pending = adapter.add(d1); // probe is in flight
+    adapter.remove(); // removed before the probe resolves
+    settle({ ok: true, json: async () => ({}) });
+    await pending;
+    // The stale probe continuation must not re-add the removed layer/source.
+    expect(map.addSource).not.toHaveBeenCalled();
+    expect(map.addLayer).not.toHaveBeenCalled();
+  });
+
   it('signals no data and skips tiling when TiTiler cannot find the date COG', async () => {
     // TiTiler responds non-OK (the COG for this date does not exist).
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 404 }));

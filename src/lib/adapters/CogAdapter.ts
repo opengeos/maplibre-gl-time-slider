@@ -1,5 +1,5 @@
 import type { CogSourceSpec, SourceSpec } from '../core/types';
-import { buildTiTilerTileUrl } from '../utils/titiler';
+import { buildTiTilerTileUrl, DEFAULT_TITILER_ENDPOINT } from '../utils/titiler';
 import { resolveUrl } from '../template/urlTemplate';
 import { RasterAdapter } from './BaseAdapter';
 import type { AdapterContext } from './types';
@@ -40,7 +40,7 @@ export class CogAdapter extends RasterAdapter {
     const resolved = resolveUrl(this.spec.url, date);
     const cogUrl = resolved instanceof Promise ? await resolved : resolved;
     if (this.missing.has(cogUrl)) return false;
-    const base = (this.spec.endpoint ?? 'https://titiler.d2s.org').replace(/\/$/, '');
+    const base = (this.spec.endpoint ?? DEFAULT_TITILER_ENDPOINT).replace(/\/$/, '');
     const infoUrl = `${base}/cog/info?url=${encodeURIComponent(cogUrl)}`;
     try {
       const response = await fetch(infoUrl);

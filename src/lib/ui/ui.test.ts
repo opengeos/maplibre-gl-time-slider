@@ -475,9 +475,42 @@ describe('layersPopover', () => {
     // COG is the default type; its example (Landsat) pre-fills url + bands 1,2,3.
     (popover.root.querySelector('.ts-add-submit') as HTMLButtonElement).click();
     await vi.waitFor(() => expect(addSource).toHaveBeenCalledTimes(1));
-    const spec = addSource.mock.calls[0][0] as { bidx?: number[]; url?: string };
+    const spec = addSource.mock.calls[0][0] as {
+      bidx?: number[];
+      url?: string;
+      engine?: string;
+      endpoint?: string;
+    };
     expect(spec.url).toContain('landsat_ts');
     expect(spec.bidx).toEqual([1, 2, 3]);
+    // The COG form defaults to the GPU engine and ships the default TiTiler
+    // endpoint.
+    expect(spec.engine).toBe('gpu');
+    expect(spec.endpoint).toBe('https://titiler.d2s.org');
+
+    popover.destroy();
+  });
+
+  it('reflects a COG source engine and endpoint into the form on open', () => {
+    const source = {
+      type: 'cog',
+      id: 'c',
+      name: 'COG',
+      url: 'https://x/{date:YYYY}.tif',
+      engine: 'titiler',
+      endpoint: 'https://my.titiler.example',
+    } as unknown as SourceSpec;
+    const popover = createLayersPopover(baseController({ getSources: () => [source] }));
+    document.body.appendChild(popover.root);
+    (popover.root.querySelector('.ts-add-data') as HTMLButtonElement).click();
+
+    const select = popover.root.querySelector('.ts-type-select') as HTMLSelectElement;
+    expect(select.value).toBe('cog');
+    const values = Array.from(
+      popover.root.querySelectorAll('.ts-add-form input, .ts-add-form select')
+    ).map((el) => (el as HTMLInputElement | HTMLSelectElement).value);
+    expect(values).toContain('https://my.titiler.example');
+    expect(values).toContain('titiler');
 
     popover.destroy();
   });

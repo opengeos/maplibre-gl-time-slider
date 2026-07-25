@@ -2,7 +2,7 @@ import type { CogSourceSpec, Granularity, SourceSpec } from '../core/types';
 import { formatDate } from '../template/dateFormat';
 import { resolveUrl } from '../template/urlTemplate';
 import { GRANULARITIES } from '../time/granularity';
-import { getTiTilerBounds } from '../utils/titiler';
+import { DEFAULT_TITILER_ENDPOINT, getTiTilerBounds } from '../utils/titiler';
 import type { DockController } from './types';
 
 /**
@@ -27,9 +27,9 @@ const SOURCE_TYPES: { value: SourceSpec['type']; label: string }[] = [
   { value: 'wms', label: 'WMS-Time' },
 ];
 
-/** Default TiTiler endpoint, mirroring the CogAdapter / buildTiTilerTileUrl
- * default so the COG form's endpoint field ships a working value. */
-const TITILER_DEFAULT_ENDPOINT = 'https://titiler.d2s.org';
+/** Default TiTiler endpoint the COG form's endpoint field ships with, shared
+ * with the adapters so the two never drift. */
+const TITILER_DEFAULT_ENDPOINT = DEFAULT_TITILER_ENDPOINT;
 
 /**
  * Colormaps offered in the colormap dropdown. This mirrors the full named set
@@ -1279,12 +1279,20 @@ function buildForm(
     // `{date:...}` tokens stay visible and editable) or a resolver function
     // (which has no editable template, so resolve it for the current date to
     // show a concrete URL rather than an empty box).
-    const asUrl = (v: unknown): string => {
+    const asUrl = (v: unknown, apply: (url: string) => void): string => {
       if (typeof v === 'string') return v;
       if (typeof v !== 'function') return '';
       try {
         const resolved = resolveUrl(v as never, controller.getState().currentDate);
-        return typeof resolved === 'string' ? resolved : '';
+        if (typeof resolved === 'string') return resolved;
+        // An async resolver: fill the field once the promise settles rather than
+        // leaving it blank; swallow a rejection so it never surfaces unhandled.
+        void Promise.resolve(resolved)
+          .then((u) => {
+            if (typeof u === 'string') apply(u);
+          })
+          .catch(() => undefined);
+        return '';
       } catch {
         return '';
       }
@@ -1295,7 +1303,7 @@ function buildForm(
     nameField.input.value = asStr(src.name);
     idField.input.value = asStr(src.id);
     if (src.type === 'cog') {
-      urlField.input.value = asUrl(src.url);
+      urlField.input.value = asUrl(src.url, (u) => (urlField.input.value = u));
       cogEngineField.select.value =
         src.engine === 'gpu' || src.engine === 'wasm' ? src.engine : 'titiler';
       endpointField.input.value = asStr(src.endpoint) || TITILER_DEFAULT_ENDPOINT;
@@ -1305,7 +1313,7 @@ function buildForm(
       nodataField.input.value = src.nodata != null ? String(src.nodata) : '';
       bandsField.input.value = bandsStr;
     } else if (src.type === 'mosaic') {
-      mosaicUrlField.input.value = asUrl(src.url);
+      mosaicUrlField.input.value = asUrl(src.url, (u) => (mosaicUrlField.input.value = u));
       engineField.select.value = src.engine === 'wasm' ? 'wasm' : 'gpu';
       cmapSelect.value = asStr(src.colormap);
       rescaleMin.value = rescale ? String(rescale[0]) : '';
@@ -1313,9 +1321,9 @@ function buildForm(
       mosaicNodataField.input.value = src.nodata != null ? String(src.nodata) : '';
       bandsField.input.value = bandsStr;
     } else if (src.type === 'xyz') {
-      tilesField.input.value = asUrl(src.tiles);
+      tilesField.input.value = asUrl(src.tiles, (u) => (tilesField.input.value = u));
     } else if (src.type === 'geojson') {
-      dataField.input.value = asUrl(src.data);
+      dataField.input.value = asUrl(src.data, (u) => (dataField.input.value = u));
       timePropField.input.value = asStr(src.timeProperty);
       const unit = (src.window as { unit?: string } | undefined)?.unit;
       if (unit) windowField.select.value = unit;

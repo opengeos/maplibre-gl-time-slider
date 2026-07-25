@@ -1,4 +1,11 @@
 /**
+ * Default public TiTiler endpoint. Shared so the tile/info builders, the COG
+ * adapter's availability probe, and the Add data form's endpoint field all
+ * agree on one value.
+ */
+export const DEFAULT_TITILER_ENDPOINT = 'https://titiler.d2s.org';
+
+/**
  * Options for building a TiTiler tile URL.
  */
 export interface TiTilerOptions {
@@ -87,7 +94,7 @@ export interface TiTilerOptions {
 export function buildTiTilerTileUrl(options: TiTilerOptions): string {
   const {
     url,
-    endpoint = 'https://titiler.d2s.org',
+    endpoint = DEFAULT_TITILER_ENDPOINT,
     colormap,
     rescale,
     bidx,
@@ -147,7 +154,7 @@ export function buildTiTilerTileUrl(options: TiTilerOptions): string {
  */
 export async function getTiTilerBounds(
   url: string,
-  endpoint = 'https://titiler.d2s.org'
+  endpoint = DEFAULT_TITILER_ENDPOINT
 ): Promise<[number, number, number, number]> {
   const baseUrl = endpoint.replace(/\/$/, '');
   const infoUrl = `${baseUrl}/cog/bounds?url=${encodeURIComponent(url)}`;
@@ -176,7 +183,7 @@ export async function getTiTilerBounds(
  */
 export async function getTiTilerInfo(
   url: string,
-  endpoint = 'https://titiler.d2s.org'
+  endpoint = DEFAULT_TITILER_ENDPOINT
 ): Promise<Record<string, unknown>> {
   const baseUrl = endpoint.replace(/\/$/, '');
   const infoUrl = `${baseUrl}/cog/info?url=${encodeURIComponent(url)}`;
@@ -204,7 +211,7 @@ export async function getTiTilerInfo(
  */
 export async function getTiTilerStatistics(
   url: string,
-  endpoint = 'https://titiler.d2s.org'
+  endpoint = DEFAULT_TITILER_ENDPOINT
 ): Promise<Record<string, { min: number; max: number; mean: number; std: number }>> {
   const baseUrl = endpoint.replace(/\/$/, '');
   const statsUrl = `${baseUrl}/cog/statistics?url=${encodeURIComponent(url)}`;
