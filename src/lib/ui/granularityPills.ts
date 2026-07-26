@@ -32,6 +32,9 @@ export function createPills(controller: DockController): PillsHandle {
   const rebuild = (): void => {
     buttons.clear();
     root.replaceChildren();
+    // An ordinal timeline steps through an explicit date list, so granularity no
+    // longer zooms the axis — offering the pills would imply control it lacks.
+    root.style.display = controller.getScale().ordinal ? 'none' : '';
     for (const granularity of controller.getGranularities()) {
       const btn = document.createElement('button');
       btn.type = 'button';

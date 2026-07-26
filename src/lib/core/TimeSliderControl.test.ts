@@ -332,6 +332,280 @@ describe('TimeSliderControl config', () => {
   });
 });
 
+describe('TimeSliderControl explicit dates', () => {
+  // Sparse, irregular dates in the shape real archives take: a few scenes in
+  // 2023, a gap of a year, then two more. A continuous daily timeline over the
+  // same span would draw ~1,000 ticks, nearly all of them with no data.
+  const DATES = ['2023-01-28', '2023-02-20', '2023-03-27', '2024-04-01', '2025-10-03'];
+  const day = (date: Date) => date.toISOString().slice(0, 10);
+
+  /** Mounts a control whose timeline is the explicit date list. */
+  function mountDates(opts: Partial<TimeSliderOptions> = {}) {
+    const control = new TimeSliderControl({ dates: DATES, granularity: 'day', ...opts });
+    const stub = createStubMap();
+    control.onAdd(stub.map);
+    return { control, stub };
+  }
+
+  // Several tests below stub `fetch`. Unstub here rather than at the end of each
+  // test body, so a failing assertion cannot leak a mocked fetch into the next.
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('derives the range from the list and needs no startDate', () => {
+    const { control } = mountDates();
+    const state = control.getState();
+    expect(day(state.startDate)).toBe('2023-01-28');
+    expect(day(state.endDate)).toBe('2025-10-03');
+    expect(state.dates?.map(day)).toEqual(DATES);
+    expect(control.getState().endDateAuto).toBe(false);
+  });
+
+  it('throws when given neither a startDate nor dates', () => {
+    expect(() => new TimeSliderControl({} as TimeSliderOptions)).toThrow(/startDate/);
+    expect(() => new TimeSliderControl({ dates: [] } as TimeSliderOptions)).toThrow(/dates/);
+  });
+
+  it('snaps every navigation onto a date that has data', () => {
+    const { control } = mountDates();
+    // A date deep inside the year-long gap still lands on real data.
+    control.goTo(new Date('2023-09-15T00:00:00Z'));
+    expect(day(control.getCurrentDate())).toBe('2023-03-27');
+  });
+
+  it('steps between consecutive dates, skipping the empty span', () => {
+    const { control } = mountDates({ initialDate: '2023-03-27' });
+    control.next();
+    expect(day(control.getCurrentDate())).toBe('2024-04-01');
+    control.prev();
+    expect(day(control.getCurrentDate())).toBe('2023-03-27');
+  });
+
+  it('plays through exactly the listed dates and loops', () => {
+    vi.useFakeTimers();
+    const seen: string[] = [];
+    const { control } = mountDates({ speed: 100, loop: true, onChange: (d) => seen.push(day(d)) });
+    control.play();
+    // Five steps from the first date: four advances, then a wrap to the start.
+    vi.advanceTimersByTime(500);
+    control.pause();
+    vi.useRealTimers();
+    expect(seen).toEqual(['2023-02-20', '2023-03-27', '2024-04-01', '2025-10-03', '2023-01-28']);
+  });
+
+  it('treats startDate / endDate as clips on the list', () => {
+    const { control } = mountDates({ startDate: '2023-03-01', endDate: '2024-12-31' });
+    const state = control.getState();
+    expect(state.dates?.map(day)).toEqual(['2023-03-27', '2024-04-01']);
+    expect(day(state.startDate)).toBe('2023-03-27');
+    expect(day(state.endDate)).toBe('2024-04-01');
+    // The full list is retained, so a later widening can restore the dropped dates.
+    expect(control.getDates()?.map(day)).toEqual(DATES);
+  });
+
+  it('re-clips the original list on setRange rather than eroding it', () => {
+    const { control } = mountDates();
+    control.setRange('2023-03-01', '2024-12-31');
+    expect(control.getState().dates?.map(day)).toEqual(['2023-03-27', '2024-04-01']);
+    // Widening again recovers everything, because the clip applies to the original.
+    control.setRange('2000-01-01', '2030-01-01');
+    expect(control.getState().dates?.map(day)).toEqual(DATES);
+  });
+
+  it('ignores a clip that would leave no dates at all', () => {
+    const { control } = mountDates({ startDate: '2030-01-01', endDate: '2031-01-01' });
+    expect(control.getState().dates?.map(day)).toEqual(DATES);
+  });
+
+  it('steps `interval` dates at a time', () => {
+    const { control } = mountDates({ interval: 2 });
+    control.next();
+    expect(day(control.getCurrentDate())).toBe('2023-03-27');
+  });
+
+  it('applies a list added later with setDates and re-snaps the marker', () => {
+    const control = new TimeSliderControl({
+      startDate: '2023-01-01',
+      endDate: '2025-12-31',
+      granularity: 'day',
+    });
+    const stub = createStubMap();
+    control.onAdd(stub.map);
+    expect(control.getState().dates).toBeUndefined();
+
+    control.goTo(new Date('2023-09-15T00:00:00Z'));
+    control.setDates(DATES);
+    expect(control.getState().dates?.map(day)).toEqual(DATES);
+    // The marker was sitting on a date with no data; it moves to the nearest real one.
+    expect(day(control.getCurrentDate())).toBe('2023-03-27');
+    expect(day(control.getState().endDate)).toBe('2025-10-03');
+  });
+
+  it('drops back to a continuous timeline over the same span when cleared', () => {
+    const { control } = mountDates();
+    control.setDates(null);
+    const state = control.getState();
+    expect(state.dates).toBeUndefined();
+    expect(day(state.startDate)).toBe('2023-01-28');
+    expect(day(state.endDate)).toBe('2025-10-03');
+    // Continuous again: stepping advances a single day.
+    control.goTo(new Date('2023-01-28T00:00:00Z'));
+    control.next();
+    expect(day(control.getCurrentDate())).toBe('2023-01-29');
+  });
+
+  it('collapses catalog timestamps that share a granularity unit into one step', () => {
+    // A STAC search reports one feature per tile, so a single overpass arrives
+    // as several timestamps seconds apart. At day granularity that is one step,
+    // not a run of identical-looking ticks.
+    const { control } = mountDates({
+      dates: [
+        '2023-02-18T16:12:31Z',
+        '2023-02-18T16:12:35Z',
+        '2023-02-18T16:12:39Z',
+        '2023-02-20T16:22:11Z',
+      ],
+    });
+    expect(control.getDates()?.map(day)).toEqual(['2023-02-18', '2023-02-20']);
+    // The surviving entry keeps its exact time, so a URL template embedding the
+    // full timestamp still resolves.
+    expect(control.getDates()?.[0].toISOString()).toBe('2023-02-18T16:12:31.000Z');
+  });
+
+  it('keeps sub-day steps at hour granularity', () => {
+    const { control } = mountDates({
+      granularity: 'hour',
+      dates: ['2023-02-18T16:12:31Z', '2023-02-18T18:40:00Z'],
+    });
+    expect(control.getDates()).toHaveLength(2);
+  });
+
+  it('re-collapses the list when the granularity coarsens', () => {
+    const { control } = mountDates({
+      granularity: 'hour',
+      dates: ['2023-02-18T16:12:31Z', '2023-02-18T18:40:00Z', '2023-02-20T16:22:11Z'],
+    });
+    expect(control.getState().dates).toHaveLength(3);
+    // Two of those share a day, so switching to days must merge them rather
+    // than draw two identically labelled ticks.
+    control.setGranularity('day');
+    expect(control.getState().dates?.map(day)).toEqual(['2023-02-18', '2023-02-20']);
+    // The finer list is preserved, so switching back restores the hourly steps.
+    control.setGranularity('hour');
+    expect(control.getState().dates).toHaveLength(3);
+  });
+
+  it('loadDates fetches a list from a URL and applies it', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        headers: { get: () => 'application/json' },
+        text: async () => JSON.stringify(DATES),
+      }))
+    );
+    const control = new TimeSliderControl({ startDate: '2020-01-01', endDate: '2026-01-01' });
+    const stub = createStubMap();
+    control.onAdd(stub.map);
+
+    await control.loadDates('https://example.com/scenes.json');
+    expect(control.getDates()?.map(day)).toEqual(DATES);
+    expect(control.getDatesUrl()).toBe('https://example.com/scenes.json');
+    expect(control.getState().dates?.map(day)).toEqual(DATES);
+    // Serialized alongside the resolved dates, so restoring never refetches.
+    const config = control.getConfig();
+    expect(config.datesUrl).toBe('https://example.com/scenes.json');
+    expect(config.dates).toHaveLength(DATES.length);
+  });
+
+  it('loadDates leaves the timeline untouched when the fetch fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: false,
+        status: 404,
+        headers: { get: () => null },
+        text: async () => '',
+      }))
+    );
+    const { control } = mountDates();
+    await expect(control.loadDates('https://example.com/missing.json')).rejects.toThrow(/404/);
+    // The working list survives a failed load.
+    expect(control.getDates()?.map(day)).toEqual(DATES);
+    expect(control.getDatesUrl()).toBeUndefined();
+  });
+
+  it('setDates supersedes a URL the list was loaded from', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        headers: { get: () => 'text/plain' },
+        text: async () => DATES.join('\n'),
+      }))
+    );
+    const { control } = mountDates();
+    await control.loadDates('https://example.com/scenes.txt');
+    expect(control.getDatesUrl()).toBe('https://example.com/scenes.txt');
+    control.setDates(['2024-01-01']);
+    expect(control.getDatesUrl()).toBeUndefined();
+    expect(control.getConfig().datesUrl).toBeUndefined();
+  });
+
+  it('keeps an already-open end open when clearing a list that was never set', () => {
+    const control = new TimeSliderControl({ startDate: '2023-01-01' });
+    const stub = createStubMap();
+    control.onAdd(stub.map);
+    expect(control.getState().endDateAuto).toBe(true);
+    // A no-op clear (e.g. an add-form example that declares no dates) must not
+    // pin the open end to today.
+    control.setDates(null);
+    expect(control.getState().endDateAuto).toBe(true);
+    expect(control.getConfig().endDate).toBeUndefined();
+  });
+
+  it('round-trips the list through getConfig / setConfig with clips intact', () => {
+    const { control } = mountDates({ startDate: '2023-03-01' });
+    control.goTo(new Date('2024-04-01T00:00:00Z'));
+    const config = control.getConfig();
+    // Saved unclipped, so restoring can re-apply (or widen) the clip.
+    expect(config.dates).toHaveLength(DATES.length);
+
+    const fresh = new TimeSliderControl({ startDate: '2020-01-01' });
+    const stub = createStubMap();
+    fresh.onAdd(stub.map);
+    fresh.setConfig(config);
+    expect(fresh.getState().dates?.map(day)).toEqual(['2023-03-27', '2024-04-01', '2025-10-03']);
+    expect(day(fresh.getCurrentDate())).toBe('2024-04-01');
+    expect(fresh.getDates()?.map(day)).toEqual(DATES);
+  });
+
+  it('omits dates from the config for a continuous timeline', () => {
+    const { control } = mount();
+    expect(control.getConfig().dates).toBeUndefined();
+  });
+
+  it('hides the granularity pills, which cannot change an ordinal step size', () => {
+    const { control, stub } = mountDates();
+    const pills = stub.container.querySelector('.ts-pills') as HTMLElement;
+    expect(pills.style.display).toBe('none');
+    control.setDates(null);
+    expect(pills.style.display).toBe('');
+  });
+
+  it('renders one axis tick per date instead of one per day', () => {
+    const { stub } = mountDates();
+    // The same span at day granularity would be ~1,000 ticks.
+    expect(stub.container.querySelectorAll('.ts-tick')).toHaveLength(DATES.length);
+    expect(
+      [...stub.container.querySelectorAll('.ts-tick-label')].map((el) => el.textContent)
+    ).toEqual(['2023 Jan 28', 'Feb 20', 'Mar 27', '2024 Apr 01', '2025 Oct 03']);
+  });
+});
+
 describe('TimeSliderControl appearance', () => {
   it('setTheme updates the option and toggles dock theme classes live', () => {
     const { control, stub } = mount({ theme: 'auto' });

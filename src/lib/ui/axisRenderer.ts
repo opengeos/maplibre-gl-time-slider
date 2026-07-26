@@ -1,6 +1,4 @@
 import { clamp } from '../utils/helpers';
-import { dateToFraction, fractionToDate } from '../time/timeline';
-import { generateTicks } from '../time/ticks';
 import { formatDate } from '../template/dateFormat';
 import type { DockController } from './types';
 
@@ -74,8 +72,7 @@ export function createAxis(controller: DockController): AxisHandle {
   };
 
   const navigateTo = (clientX: number): void => {
-    const { startDate, endDate } = controller.getState();
-    controller.goTo(fractionToDate(fractionFromClientX(clientX), startDate, endDate));
+    controller.goTo(controller.getScale().fromFraction(fractionFromClientX(clientX)));
   };
 
   const onDown = (e: Event): void => {
@@ -133,10 +130,11 @@ export function createAxis(controller: DockController): AxisHandle {
   };
 
   const renderTicks = (): void => {
-    const { startDate, endDate, granularity } = controller.getState();
     ticksLayer.replaceChildren();
     labelEls = [];
-    const ticks = generateTicks(startDate, endDate, granularity);
+    // The scale decides what a tick is: calendar boundaries on a continuous
+    // timeline, one per entry (evenly spaced) on an ordinal one.
+    const ticks = controller.getScale().ticks();
     for (const tick of ticks) {
       const el = document.createElement('div');
       el.className = tick.major ? 'ts-tick ts-tick-major' : 'ts-tick';
@@ -169,8 +167,8 @@ export function createAxis(controller: DockController): AxisHandle {
   observer?.observe(track);
 
   const setMarker = (): void => {
-    const { currentDate, startDate, endDate } = controller.getState();
-    const fraction = dateToFraction(currentDate, startDate, endDate);
+    const { currentDate } = controller.getState();
+    const fraction = controller.getScale().toFraction(currentDate);
     marker.style.left = `${fraction * 100}%`;
     markerLabel.textContent = formatDate(currentDate, controller.getDateFormat());
     // Keep the label inside the track near the edges instead of centering it.

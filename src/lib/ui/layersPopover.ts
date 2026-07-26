@@ -2,6 +2,7 @@ import type { CogSourceSpec, Granularity, SourceSpec } from '../core/types';
 import { formatDate } from '../template/dateFormat';
 import { resolveUrl } from '../template/urlTemplate';
 import { GRANULARITIES } from '../time/granularity';
+import { isDateListUrl } from '../time/dateSource';
 import { DEFAULT_TITILER_ENDPOINT, getTiTilerBounds } from '../utils/titiler';
 import type { DockController } from './types';
 
@@ -40,20 +41,113 @@ const TITILER_DEFAULT_ENDPOINT = DEFAULT_TITILER_ENDPOINT;
  * for display casing. Re-check against `maplibre-gl-raster` when bumping it.
  */
 const COLORMAPS = [
-  'accent', 'afmhot', 'algae', 'amp', 'autumn', 'balance', 'binary', 'blues',
-  'bone', 'brbg', 'brg', 'bugn', 'bupu', 'bwr', 'cfastie', 'cividis', 'cmrmap',
-  'cool', 'coolwarm', 'copper', 'cubehelix', 'curl', 'dark2', 'deep', 'delta',
-  'dense', 'diff', 'flag', 'gist_earth', 'gist_gray', 'gist_heat', 'gist_ncar',
-  'gist_rainbow', 'gist_stern', 'gist_yarg', 'gnbu', 'gnuplot', 'gnuplot2',
-  'gray', 'greens', 'greys', 'haline', 'hot', 'hsv', 'ice', 'inferno', 'jet',
-  'magma', 'matter', 'nipy_spectral', 'ocean', 'oranges', 'orrd', 'oxy',
-  'paired', 'pastel1', 'pastel2', 'phase', 'pink', 'piyg', 'plasma', 'prgn',
-  'prism', 'pubu', 'pubugn', 'puor', 'purd', 'purples', 'rain', 'rainbow',
-  'rdbu', 'rdgy', 'rdpu', 'rdylbu', 'rdylgn', 'reds', 'rplumbo', 'schwarzwald',
-  'seismic', 'set1', 'set2', 'set3', 'solar', 'spectral', 'speed', 'spring',
-  'summer', 'tab10', 'tab20', 'tab20b', 'tab20c', 'tarn', 'tempo', 'terrain',
-  'thermal', 'topo', 'turbid', 'turbo', 'twilight', 'twilight_shifted',
-  'viridis', 'winter', 'wistia', 'ylgn', 'ylgnbu', 'ylorbr', 'ylorrd',
+  'accent',
+  'afmhot',
+  'algae',
+  'amp',
+  'autumn',
+  'balance',
+  'binary',
+  'blues',
+  'bone',
+  'brbg',
+  'brg',
+  'bugn',
+  'bupu',
+  'bwr',
+  'cfastie',
+  'cividis',
+  'cmrmap',
+  'cool',
+  'coolwarm',
+  'copper',
+  'cubehelix',
+  'curl',
+  'dark2',
+  'deep',
+  'delta',
+  'dense',
+  'diff',
+  'flag',
+  'gist_earth',
+  'gist_gray',
+  'gist_heat',
+  'gist_ncar',
+  'gist_rainbow',
+  'gist_stern',
+  'gist_yarg',
+  'gnbu',
+  'gnuplot',
+  'gnuplot2',
+  'gray',
+  'greens',
+  'greys',
+  'haline',
+  'hot',
+  'hsv',
+  'ice',
+  'inferno',
+  'jet',
+  'magma',
+  'matter',
+  'nipy_spectral',
+  'ocean',
+  'oranges',
+  'orrd',
+  'oxy',
+  'paired',
+  'pastel1',
+  'pastel2',
+  'phase',
+  'pink',
+  'piyg',
+  'plasma',
+  'prgn',
+  'prism',
+  'pubu',
+  'pubugn',
+  'puor',
+  'purd',
+  'purples',
+  'rain',
+  'rainbow',
+  'rdbu',
+  'rdgy',
+  'rdpu',
+  'rdylbu',
+  'rdylgn',
+  'reds',
+  'rplumbo',
+  'schwarzwald',
+  'seismic',
+  'set1',
+  'set2',
+  'set3',
+  'solar',
+  'spectral',
+  'speed',
+  'spring',
+  'summer',
+  'tab10',
+  'tab20',
+  'tab20b',
+  'tab20c',
+  'tarn',
+  'tempo',
+  'terrain',
+  'thermal',
+  'topo',
+  'turbid',
+  'turbo',
+  'twilight',
+  'twilight_shifted',
+  'viridis',
+  'winter',
+  'wistia',
+  'ylgn',
+  'ylgnbu',
+  'ylorbr',
+  'ylorrd',
 ];
 
 /**
@@ -63,14 +157,42 @@ const COLORMAPS = [
  * Keys not listed here are lowercase in matplotlib too and shown as-is.
  */
 const COLORMAP_LABELS: Record<string, string> = {
-  greys: 'Greys', purples: 'Purples', blues: 'Blues', greens: 'Greens',
-  oranges: 'Oranges', reds: 'Reds', ylorbr: 'YlOrBr', ylorrd: 'YlOrRd',
-  orrd: 'OrRd', purd: 'PuRd', rdpu: 'RdPu', bupu: 'BuPu', gnbu: 'GnBu',
-  pubu: 'PuBu', ylgnbu: 'YlGnBu', pubugn: 'PuBuGn', bugn: 'BuGn', ylgn: 'YlGn',
-  wistia: 'Wistia', piyg: 'PiYG', prgn: 'PRGn', brbg: 'BrBG', puor: 'PuOr',
-  rdgy: 'RdGy', rdbu: 'RdBu', rdylbu: 'RdYlBu', rdylgn: 'RdYlGn',
-  spectral: 'Spectral', pastel1: 'Pastel1', pastel2: 'Pastel2', paired: 'Paired',
-  accent: 'Accent', dark2: 'Dark2', set1: 'Set1', set2: 'Set2', set3: 'Set3',
+  greys: 'Greys',
+  purples: 'Purples',
+  blues: 'Blues',
+  greens: 'Greens',
+  oranges: 'Oranges',
+  reds: 'Reds',
+  ylorbr: 'YlOrBr',
+  ylorrd: 'YlOrRd',
+  orrd: 'OrRd',
+  purd: 'PuRd',
+  rdpu: 'RdPu',
+  bupu: 'BuPu',
+  gnbu: 'GnBu',
+  pubu: 'PuBu',
+  ylgnbu: 'YlGnBu',
+  pubugn: 'PuBuGn',
+  bugn: 'BuGn',
+  ylgn: 'YlGn',
+  wistia: 'Wistia',
+  piyg: 'PiYG',
+  prgn: 'PRGn',
+  brbg: 'BrBG',
+  puor: 'PuOr',
+  rdgy: 'RdGy',
+  rdbu: 'RdBu',
+  rdylbu: 'RdYlBu',
+  rdylgn: 'RdYlGn',
+  spectral: 'Spectral',
+  pastel1: 'Pastel1',
+  pastel2: 'Pastel2',
+  paired: 'Paired',
+  accent: 'Accent',
+  dark2: 'Dark2',
+  set1: 'Set1',
+  set2: 'Set2',
+  set3: 'Set3',
   cmrmap: 'CMRmap',
 };
 
@@ -83,6 +205,8 @@ interface ExampleTimeline {
   granularity: Granularity;
   granularities: Granularity[];
   speed: number;
+  /** Explicit dates to step through, for an example with irregular data. */
+  dates?: string[];
 }
 
 /**
@@ -206,6 +330,31 @@ function field(
   span.textContent = label;
   const input = document.createElement('input');
   input.type = type;
+  input.placeholder = placeholder;
+  row.append(span, input);
+  return { row, input };
+}
+
+/**
+ * Builds a labeled multi-line field, for values long enough that a one-line
+ * input would scroll sideways (e.g. a list of dates).
+ *
+ * @param label - Field label
+ * @param placeholder - Placeholder text
+ * @param rows - Visible row count
+ * @returns The row element and its textarea
+ */
+function textareaField(
+  label: string,
+  placeholder = '',
+  rows = 2
+): { row: HTMLElement; input: HTMLTextAreaElement } {
+  const row = document.createElement('label');
+  row.className = 'ts-field';
+  const span = document.createElement('span');
+  span.textContent = label;
+  const input = document.createElement('textarea');
+  input.rows = rows;
   input.placeholder = placeholder;
   row.append(span, input);
   return { row, input };
@@ -365,8 +514,7 @@ function enablePopoverResize(popover: HTMLElement): { syncSide: () => void } {
   const vGrip = document.createElement('div');
   vGrip.className = 'ts-resize-grip-v';
   popover.appendChild(vGrip);
-  const scrollArea = (): HTMLElement | null =>
-    popover.querySelector('.ts-popover-scroll');
+  const scrollArea = (): HTMLElement | null => popover.querySelector('.ts-popover-scroll');
 
   let startY = 0;
   let startHeight = 0;
@@ -517,8 +665,23 @@ export function createLayersPopover(controller: DockController): LayersHandle {
 }
 
 /**
- * Builds the timeline range section (start/end dates + interval), wired to the
- * controller's {@link DockController.setRange}.
+ * Splits a typed date list into its entries. Commas, whitespace, and newlines
+ * all separate, so a pasted column of dates works as well as a typed CSV line.
+ *
+ * @param value - The raw field text
+ * @returns The non-empty entries, unparsed
+ */
+function splitDateList(value: string): string[] {
+  return value
+    .split(/[,;\s]+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Builds the timeline range section (start/end dates, explicit date list, and
+ * interval), wired to the controller's {@link DockController.setRange} and
+ * {@link DockController.setDates}.
  */
 function buildTimelineSection(controller: DockController): {
   section: HTMLElement;
@@ -537,12 +700,42 @@ function buildTimelineSection(controller: DockController): {
   const end = field('End date', '', 'date');
   // A blank end date tracks today, so the timeline always reaches the latest data.
   end.input.title = 'Leave blank to track the current date (always shows the latest data)';
+  // Irregular data (a satellite series with cloudy days missing, occasional
+  // survey dates) only exists on scattered dates; listing them here steps the
+  // timeline through those alone instead of every calendar step in between.
+  const dates = textareaField('Dates', 'dates, or a URL to a .json / .csv / .txt list');
+  dates.input.classList.add('ts-dates');
+  dates.input.title =
+    'Optional list of the only dates that have data, separated by commas, ' +
+    'spaces, or newlines — or a URL to a JSON, CSV, or text file listing them. ' +
+    'The timeline then steps through just these dates (Start/End clip the list, ' +
+    'Interval steps N at a time). Leave blank for a continuous timeline.';
+  // Reports what a pasted URL resolved to (or why it did not). Announced live,
+  // since the outcome of a fetch is otherwise invisible to a screen reader.
+  const datesStatus = document.createElement('div');
+  datesStatus.className = 'ts-dates-status';
+  datesStatus.setAttribute('role', 'status');
+  datesStatus.setAttribute('aria-live', 'polite');
+  dates.row.appendChild(datesStatus);
   const interval = field('Interval', '', 'number');
   interval.input.min = '1';
   const initial = field('Initial date', '', 'date');
-  fields.append(start.row, end.row, interval.row, initial.row);
+  fields.append(start.row, end.row, dates.row, interval.row, initial.row);
 
   section.append(title, fields);
+
+  /**
+   * Writes the date-field status line, or clears it when there is nothing to
+   * report.
+   *
+   * @param message - Text to show, or '' to hide the line
+   * @param kind - Styling hint: a neutral note or an error
+   */
+  const setStatus = (message: string, kind: 'info' | 'error' = 'info'): void => {
+    datesStatus.textContent = message;
+    datesStatus.classList.toggle('ts-error', kind === 'error');
+    datesStatus.classList.toggle('ts-visible', message !== '');
+  };
 
   const apply = (): void => {
     if (!start.input.value) return;
@@ -554,6 +747,9 @@ function buildTimelineSection(controller: DockController): {
     if (endDate && Number.isNaN(endDate.getTime())) return;
     const step = parseInt(interval.input.value, 10);
     controller.setRange(startDate, endDate, Number.isNaN(step) ? undefined : step);
+    // With a date list the bounds are clips, so the range that survives may not
+    // be what was typed; show what actually took effect.
+    if (controller.getDates()) sync();
   };
   start.input.addEventListener('change', apply);
   end.input.addEventListener('change', apply);
@@ -563,6 +759,48 @@ function buildTimelineSection(controller: DockController): {
     const date = new Date(initial.input.value);
     if (!Number.isNaN(date.getTime())) controller.goTo(date);
   });
+  // Tracks the newest URL load so a slow earlier fetch cannot land after (and
+  // overwrite) a newer one the user has since kicked off.
+  let loadToken = 0;
+
+  dates.input.addEventListener('change', () => {
+    const raw = dates.input.value.trim();
+
+    // A lone URL is fetched and parsed rather than read as a date.
+    if (isDateListUrl(raw)) {
+      const token = ++loadToken;
+      setStatus('Loading dates…');
+      void controller
+        .loadDates(raw)
+        .then((loaded) => {
+          if (token !== loadToken) return;
+          setStatus(`${loaded.length} date${loaded.length === 1 ? '' : 's'} loaded`);
+          sync();
+        })
+        .catch((error: unknown) => {
+          if (token !== loadToken) return;
+          // The control leaves the timeline untouched on failure, so the user
+          // keeps whatever was working before.
+          setStatus(error instanceof Error ? error.message : 'Could not load dates', 'error');
+        });
+      return;
+    }
+
+    loadToken++;
+    const entries = splitDateList(raw);
+    // Unparsable entries are dropped by the control; reject the edit outright
+    // when nothing at all survives, so a typo cannot blank a working timeline.
+    if (entries.length > 0 && entries.every((e) => Number.isNaN(new Date(e).getTime()))) {
+      setStatus('No valid dates in that list', 'error');
+      sync();
+      return;
+    }
+    setStatus('');
+    controller.setDates(entries.length > 0 ? entries : null);
+    // setDates re-derives the range from the list (and drops any clip), so the
+    // Start/End/Initial fields above are now stale.
+    sync();
+  });
 
   const sync = (): void => {
     const state = controller.getState();
@@ -570,6 +808,13 @@ function buildTimelineSection(controller: DockController): {
     // Leave End blank when the range is open so editing Start keeps it open
     // rather than silently pinning the end to today's resolved value.
     end.input.value = state.endDateAuto ? '' : formatDate(state.endDate, 'YYYY-MM-DD');
+    // Keep showing the URL a list came from rather than expanding it: it is
+    // shorter, and it says where the dates are actually maintained. Otherwise
+    // show the full list, not the clipped one, so narrowing the range and then
+    // widening it again does not quietly discard the dropped dates.
+    dates.input.value =
+      controller.getDatesUrl() ??
+      (controller.getDates() ?? []).map((d) => formatDate(d, 'YYYY-MM-DD')).join(', ');
     interval.input.value = String(state.interval);
     initial.input.value = formatDate(state.currentDate, 'YYYY-MM-DD');
   };
@@ -1089,6 +1334,9 @@ function buildForm(
     if (type === 'custom') return;
     const t = EXAMPLES[type].timeline;
     controller.setGranularities(t.granularities);
+    // Apply the example's date list (usually none) before the range, so a list
+    // left over from the previous example cannot clip the new range instead.
+    controller.setDates(t.dates ?? null);
     controller.setRange(t.startDate, t.endDate, 1, t.granularity);
     controller.setSpeed(t.speed);
     // Start every example at its start date rather than wherever the previous
@@ -1339,7 +1587,9 @@ function buildForm(
   };
 
   /** The most recently added source of a type, or undefined. */
-  const tiedSource = (type: SourceSpec['type']): (SourceSpec & Record<string, unknown>) | undefined => {
+  const tiedSource = (
+    type: SourceSpec['type']
+  ): (SourceSpec & Record<string, unknown>) | undefined => {
     const matches = controller.getSources().filter((s) => s.type === type);
     return matches.length > 0
       ? (matches[matches.length - 1] as SourceSpec & Record<string, unknown>)

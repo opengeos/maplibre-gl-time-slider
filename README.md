@@ -12,7 +12,7 @@ A MapLibre GL JS plugin for visualizing time series raster and vector data with 
 ## Features
 
 - Full-width, bottom-docked timeline inspired by [NASA Worldview](https://worldview.earthdata.nasa.gov/) that **reserves its own row** (the map shrinks above it, so nothing is overlaid) and **collapses** to a corner toggle
-- Continuous **date range + interval** time model with hour / day / month / year granularities
+- Continuous **date range + interval** time model with hour / day / month / year granularities, or an explicit **`dates` list** for irregularly spaced data — only real dates get a tick, so a sparse archive stops rendering as a wall of no-data steps
 - Scrubbable, zoomable axis with a draggable marker and play / pause / loop / speed controls
 - The plugin **manages map layers for you** through built-in data adapters:
   - **COG** via TiTiler (colormap + rescale)
@@ -20,7 +20,7 @@ A MapLibre GL JS plugin for visualizing time series raster and vector data with 
   - **XYZ / WMTS** raster tiles
   - **WMS-Time** (OGC `TIME` parameter)
   - **GeoJSON** filtered by a time property
-- **"Add data" GUI** (a resizable panel) to configure the timeline (range, interval, initial date), tweak settings (granularity, which granularities show as pills, speed, loop, theme, date format, auto-play), and add layers at runtime. Picking a source type loads a ready-to-run example (URL, timeline, and settings) you can edit. Per-layer controls include opacity, a visibility toggle, and for COG a colormap dropdown with a "None" option for RGB / multi-band imagery, rescale, nodata, and band selection (a mosaic exposes the same, with NoData in the renderer's auto/off/number form)
+- **"Add data" GUI** (a resizable panel) to configure the timeline (range, an explicit **Dates** list for irregular data, interval, initial date), tweak settings (granularity, which granularities show as pills, speed, loop, theme, date format, auto-play), and add layers at runtime. Picking a source type loads a ready-to-run example (URL, timeline, and settings) you can edit. Per-layer controls include opacity, a visibility toggle, and for COG a colormap dropdown with a "None" option for RGB / multi-band imagery, rescale, nodata, and band selection (a mosaic exposes the same, with NoData in the renderer's auto/off/number form)
 - Time-to-URL templating with tokens (`{YYYY}`, `{MM}`, `{DD}`, `{HH}`, `{date:FORMAT}`) **or** a `(date) => url` function
 - `onChange` callback escape hatch for fully custom wiring
 - Serializable config (`getConfig` / `setConfig`) for sharing state
@@ -252,6 +252,134 @@ or the top-level `onChange(date)` callback to drive your own layers.
 { type: 'custom', resolve: (date) => ({ type: 'xyz', tiles: myTemplateFor(date) }) }
 ```
 
+## Irregular dates (hiding no-data steps)
+
+By default the timeline is continuous: it walks `startDate` → `endDate` in fixed
+granularity units, regardless of whether each step has data. For a sparse
+archive that means mostly empty frames — a daily timeline over a three-year
+satellite series with 16 usable scenes draws ~1,000 ticks, and playback sits on
+"No data" for weeks at a time between them.
+
+Pass `dates` to step through **only the dates that exist**:
+
+```typescript
+const timeSlider = new TimeSliderControl({
+  dates: ['2023-01-28', '2023-02-20', '2023-03-27', '2024-04-01', '2025-10-03'],
+  sources: [
+    {
+      type: 'cog',
+      url: 'https://example.com/chla_{date:YYYYMMDD}.tif',
+      colormap: 'jet',
+      rescale: [0, 30],
+    },
+  ],
+});
+```
+
+The timeline becomes **ordinal**: each date gets one tick, all evenly spaced, so
+a three-week gap and a three-year gap look the same on the axis. Scrubbing and
+playback can only land on a listed date, `startDate`/`endDate` are optional (the
+list sets the range, and if given they clip it), and the granularity pills are
+hidden because the list — not the granularity — now sets the step size.
+`interval` still works, stepping N entries at a time.
+
+The list is parsed, sorted, and de-duplicated on the way in, and accepts `Date`
+objects, parseable strings, or epoch milliseconds. Dates falling in the same
+granularity unit collapse to a single step, keeping the earliest timestamp: a
+catalog that reports one record per tile gives several timestamps seconds apart
+for one acquisition, and at day granularity that is one step, not a run of
+identical ticks. Raise the granularity to `'hour'` if sub-day steps are real.
+
+### Where the dates come from
+
+Anywhere. The plugin never contacts your data host — it only consumes a list of
+dates, so any catalog works: a bucket listing, a STAC search, a `datetime` column,
+a static manifest you ship alongside the tiles, or a hardcoded array. Derive them
+however you like, then hand them over.
+
+When the list is only known after an async lookup, add the control first and
+call `setDates()` when it resolves:
+
+```typescript
+const timeSlider = new TimeSliderControl({
+  startDate: '2023-01-01',
+  sources: [{ type: 'cog', url: 'https://example.com/chla_{date:YYYYMMDD}.tif' }],
+});
+map.addControl(timeSlider, 'bottom-left');
+
+// e.g. an S3/R2 listing — swap in whatever lists your archive.
+const res = await fetch('https://example.com/chla/?list-type=2');
+const dates = [...(await res.text()).matchAll(/chla_(\d{8})\.tif/g)].map(
+  ([, ymd]) => `${ymd.slice(0, 4)}-${ymd.slice(4, 6)}-${ymd.slice(6)}`
+);
+timeSlider.setDates(dates);
+```
+
+A STAC catalog is the same shape — search, then map the items to their
+timestamps:
+
+```typescript
+const { features } = await (
+  await fetch('https://earth-search.aws.element84.com/v1/search', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ collections: ['sentinel-2-l2a'], bbox, limit: 200 }),
+  })
+).json();
+timeSlider.setDates(features.map((f) => f.properties.datetime));
+```
+
+`getConfig()` serializes the list (unclipped) so a saved project restores the
+same timeline, and `setDates(null)` drops back to a continuous one.
+
+### Loading the list from a URL
+
+`loadDates(url)` fetches the list instead, so it can live next to the data
+rather than in your code:
+
+```typescript
+await timeSlider.loadDates('https://example.com/scenes.json');
+```
+
+JSON, CSV, and plain text are all accepted, detected from the extension, the
+`Content-Type`, and the body:
+
+| Format | Shapes recognized |
+|--------|-------------------|
+| JSON | A bare array (`["2023-01-28", ...]`); an array of records with a `date` / `datetime` / `time` / `timestamp` / `acquired` field; a wrapper object (`{"dates": [...]}`); a GeoJSON or STAC `FeatureCollection`, reading each feature's `properties.datetime` |
+| CSV | The `date` / `datetime` / … column when there is a header row, otherwise the first column |
+| Text | One date per line, or separated by commas, semicolons, or spaces |
+
+A STAC search response or an `ogr2ogr`-style CSV export therefore works as-is,
+with no reshaping. The same parser is exported standalone as `fetchDateList(url,
+init?)` if you want the dates without applying them. A failed load throws and
+leaves the current timeline untouched.
+
+`examples/emit/` ships both shapes for its 16 irregular scenes —
+[`chla_dates.json`](examples/emit/chla_dates.json) (a plain array) and
+[`chla_dates.csv`](examples/emit/chla_dates.csv) (a `datetime` column beside the
+granule ids) — as a template for a list you host yourself.
+
+`getConfig()` records the URL next to the resolved dates, so restoring a saved
+project is offline-safe and never refetches.
+
+### From the "Add data" panel
+
+The same thing is available without writing code: the panel's **Timeline**
+section has a **Dates** field. Put either form in it —
+
+- the dates themselves, separated by commas, spaces, or newlines
+- a URL to a `.json`, `.csv`, or `.txt` file listing them, which is fetched and
+  parsed exactly as `loadDates` would, reporting underneath how many dates it
+  found (or why it could not)
+
+— and the timeline becomes ordinal. Start/End then clip that list rather than
+defining the range, and clearing the field returns to a continuous timeline.
+
+The per-date "No data" badge still applies on top of this: sources probe each
+date as you reach it, so a list that has drifted out of sync with the archive
+still tells you rather than showing the previous frame.
+
 ## Time tokens
 
 Token strings used in URLs and `dateFormat` (resolved in UTC):
@@ -269,9 +397,10 @@ Main control class implementing MapLibre's `IControl` interface.
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `startDate` | `Date \| string` | - | Inclusive range start (required) |
-| `endDate` | `Date \| string` | current date | Inclusive range end. Omit it to leave the range open: it defaults to the current date, and a persisted config (`getConfig`) leaves it out so a restored timeline re-resolves to the then-current date and always reaches the latest data |
-| `interval` | `number` | `1` | Steps between marker positions, in granularity units |
+| `startDate` | `Date \| string` | - | Inclusive range start. Required unless `dates` is given, where it acts as a lower clip on the list |
+| `endDate` | `Date \| string` | current date | Inclusive range end. Omit it to leave the range open: it defaults to the current date, and a persisted config (`getConfig`) leaves it out so a restored timeline re-resolves to the then-current date and always reaches the latest data. With `dates`, an upper clip on the list |
+| `dates` | `Array<Date \| string \| number>` | - | Explicit dates to step through, for irregularly spaced data — see [Irregular dates](#irregular-dates-hiding-no-data-steps) |
+| `interval` | `number` | `1` | Steps between marker positions: granularity units, or entries of `dates` |
 | `granularity` | `'hour' \| 'day' \| 'month' \| 'year'` | `'day'` | Active granularity |
 | `granularities` | `Granularity[]` | all four | Granularities offered as zoom pills |
 | `initialDate` | `Date \| string` | `startDate` | Date the marker starts at |
@@ -298,7 +427,10 @@ Main control class implementing MapLibre's `IControl` interface.
 | `setAutoPlay(enabled)` | Set whether playback auto-starts on add (affects re-adds and serialized config) |
 | `setTheme(theme)` | Change the color theme (applied live) |
 | `setDateFormat(format?)` | Set the date-label token format (applied live; omit for the granularity default) |
-| `setRange(start, end, interval?, granularity?)` | Update the range |
+| `setRange(start, end, interval?, granularity?)` | Update the range (a clip on `dates`, when set) |
+| `setDates(dates?)` | Set the explicit dates to step through; pass `null` for a continuous timeline |
+| `loadDates(url, init?)` | Fetch the dates from a JSON / CSV / text URL and apply them |
+| `getDates()` / `getDatesUrl()` | The explicit dates (unclipped) and the URL they came from, if any |
 | `setGranularity(granularity)` | Change the active granularity |
 | `setGranularities(granularities)` | Set which granularities are offered as pills |
 | `collapse()` / `expand()` / `toggle()` | Hide / show the dock |

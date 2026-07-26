@@ -1,5 +1,6 @@
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { Granularity, SourceSpec, TimeSliderState } from '../core/types';
+import type { TimeScale } from '../time/scale';
 
 /**
  * The slice of the control's public API that the dock UI depends on. UI modules
@@ -9,6 +10,8 @@ import type { Granularity, SourceSpec, TimeSliderState } from '../core/types';
 export interface DockController {
   /** Current observable state. */
   getState(): TimeSliderState;
+  /** Maps dates onto the axis and defines the steps between them. */
+  getScale(): TimeScale;
   /** Granularities offered as zoom pills. */
   getGranularities(): Granularity[];
   /** Token format for the large date display. */
@@ -53,6 +56,17 @@ export interface DockController {
     interval?: number,
     granularity?: Granularity
   ): void;
+  /**
+   * Replace the explicit dates the timeline steps through. Pass `null` for a
+   * continuous timeline.
+   */
+  setDates(dates?: Array<Date | string | number> | null): void;
+  /** Fetch the date list from a JSON / CSV / text URL and apply it. */
+  loadDates(url: string, init?: RequestInit): Promise<Date[]>;
+  /** The explicit dates (unclipped), or undefined when the timeline is continuous. */
+  getDates(): Date[] | undefined;
+  /** URL the date list was loaded from, if it came from one. */
+  getDatesUrl(): string | undefined;
   /** Collapse (hide) the dock. */
   collapse(): void;
 
