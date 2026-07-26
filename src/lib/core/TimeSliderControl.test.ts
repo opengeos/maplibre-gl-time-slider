@@ -347,6 +347,12 @@ describe('TimeSliderControl explicit dates', () => {
     return { control, stub };
   }
 
+  // Several tests below stub `fetch`. Unstub here rather than at the end of each
+  // test body, so a failing assertion cannot leak a mocked fetch into the next.
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('derives the range from the list and needs no startDate', () => {
     const { control } = mountDates();
     const state = control.getState();
@@ -475,6 +481,21 @@ describe('TimeSliderControl explicit dates', () => {
     expect(control.getDates()).toHaveLength(2);
   });
 
+  it('re-collapses the list when the granularity coarsens', () => {
+    const { control } = mountDates({
+      granularity: 'hour',
+      dates: ['2023-02-18T16:12:31Z', '2023-02-18T18:40:00Z', '2023-02-20T16:22:11Z'],
+    });
+    expect(control.getState().dates).toHaveLength(3);
+    // Two of those share a day, so switching to days must merge them rather
+    // than draw two identically labelled ticks.
+    control.setGranularity('day');
+    expect(control.getState().dates?.map(day)).toEqual(['2023-02-18', '2023-02-20']);
+    // The finer list is preserved, so switching back restores the hourly steps.
+    control.setGranularity('hour');
+    expect(control.getState().dates).toHaveLength(3);
+  });
+
   it('loadDates fetches a list from a URL and applies it', async () => {
     vi.stubGlobal(
       'fetch',
@@ -497,7 +518,6 @@ describe('TimeSliderControl explicit dates', () => {
     const config = control.getConfig();
     expect(config.datesUrl).toBe('https://example.com/scenes.json');
     expect(config.dates).toHaveLength(DATES.length);
-    vi.unstubAllGlobals();
   });
 
   it('loadDates leaves the timeline untouched when the fetch fails', async () => {
@@ -515,7 +535,6 @@ describe('TimeSliderControl explicit dates', () => {
     // The working list survives a failed load.
     expect(control.getDates()?.map(day)).toEqual(DATES);
     expect(control.getDatesUrl()).toBeUndefined();
-    vi.unstubAllGlobals();
   });
 
   it('setDates supersedes a URL the list was loaded from', async () => {
@@ -534,7 +553,6 @@ describe('TimeSliderControl explicit dates', () => {
     control.setDates(['2024-01-01']);
     expect(control.getDatesUrl()).toBeUndefined();
     expect(control.getConfig().datesUrl).toBeUndefined();
-    vi.unstubAllGlobals();
   });
 
   it('keeps an already-open end open when clearing a list that was never set', () => {

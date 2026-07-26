@@ -197,8 +197,10 @@ describe('ordinal scale', () => {
   });
 
   it('thins very long lists', () => {
+    // Date-only strings: the `ordinal()` helper appends a time to build its
+    // bounds, so a full ISO string here would yield an Invalid Date range.
     const many = Array.from({ length: 5000 }, (_, i) =>
-      new Date(Date.UTC(2000, 0, 1) + i * 86_400_000).toISOString()
+      new Date(Date.UTC(2000, 0, 1) + i * 86_400_000).toISOString().slice(0, 10)
     );
     expect(ordinal(many).ticks(400).length).toBeLessThanOrEqual(400);
   });

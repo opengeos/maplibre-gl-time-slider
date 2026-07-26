@@ -50,14 +50,25 @@ type RangeFields = Pick<TimeSliderState, 'startDate' | 'endDate' | 'endDateAuto'
  * timeline can never extend past the data. Without one, the bounds are the
  * range, and an absent end stays "open" (defaulted to now, re-resolved on load).
  *
+ * The list is re-collapsed against `granularity` on every pass rather than only
+ * at ingest, so the "one step per granularity unit" invariant survives a later
+ * granularity change (an hourly list switched to day granularity collapses to
+ * one step per day instead of drawing a run of identically labelled ticks).
+ *
  * @param allDates - The unclipped date list, or undefined for a continuous timeline
+ * @param granularity - The unit at most one step may occupy
  * @param start - Requested range start (a clip when `allDates` is given)
  * @param end - Requested range end; `null`/`undefined` leaves it open
  * @returns The range fields to write into state
  */
-function resolveRange(allDates?: Date[], start?: Date, end?: Date | null): RangeFields {
+function resolveRange(
+  allDates: Date[] | undefined,
+  granularity: Granularity,
+  start?: Date,
+  end?: Date | null
+): RangeFields {
   if (allDates && allDates.length > 0) {
-    const dates = clipDates(allDates, start, end ?? undefined);
+    const dates = clipDates(collapseByUnit(allDates, granularity), start, end ?? undefined);
     return {
       dates,
       startDate: new Date(dates[0].getTime()),
@@ -157,6 +168,7 @@ export class TimeSliderControl implements IControl, DockController {
     // date list, start/end are only clips and the list sets the actual range.
     const range = resolveRange(
       this._allDates,
+      granularity,
       options.startDate == null ? undefined : toDate(options.startDate),
       options.endDate == null ? null : toDate(options.endDate)
     );
@@ -729,7 +741,8 @@ export class TimeSliderControl implements IControl, DockController {
   /**
    * Changes the active granularity, resetting the interval to 1 and re-snapping
    * the current date. On an ordinal timeline the date list keeps setting the
-   * step size, so this only changes the tick label and date-display formats.
+   * step size, so this changes the tick label and date-display formats — and
+   * re-collapses the list, since a coarser unit may now hold several entries.
    *
    * @param granularity - The new granularity
    */
@@ -738,6 +751,12 @@ export class TimeSliderControl implements IControl, DockController {
     const prev = s.currentDate.getTime();
     s.granularity = granularity;
     s.interval = 1;
+    // Re-derive the steps: a list ingested at hour granularity has to collapse
+    // to one entry per day when the timeline switches to days.
+    Object.assign(
+      s,
+      resolveRange(this._allDates, granularity, s.startDate, s.endDateAuto ? null : s.endDate)
+    );
     this._rebuildScale();
     s.currentDate = this._scale.snap(s.currentDate);
     this._view?.syncGranularity();
@@ -791,7 +810,15 @@ export class TimeSliderControl implements IControl, DockController {
   ): void {
     const s = this._state;
     const prev = s.currentDate.getTime();
-    Object.assign(s, resolveRange(this._allDates, toDate(start), end == null ? null : toDate(end)));
+    Object.assign(
+      s,
+      resolveRange(
+        this._allDates,
+        granularity ?? s.granularity,
+        toDate(start),
+        end == null ? null : toDate(end)
+      )
+    );
     if (interval != null) s.interval = Math.max(1, Math.floor(interval));
     if (granularity != null) s.granularity = granularity;
     this._rebuildScale();
@@ -832,11 +859,11 @@ export class TimeSliderControl implements IControl, DockController {
     Object.assign(
       s,
       this._allDates
-        ? resolveRange(this._allDates)
+        ? resolveRange(this._allDates, s.granularity)
         : // Dropping the list leaves a continuous timeline spanning whatever the
           // list last covered, so the dock does not jump to an unrelated range.
           // An end that was already open stays open rather than being pinned here.
-          resolveRange(undefined, s.startDate, s.endDateAuto ? null : s.endDate)
+          resolveRange(undefined, s.granularity, s.startDate, s.endDateAuto ? null : s.endDate)
     );
     this._rebuildScale();
     s.currentDate = this._scale.snap(s.currentDate);
@@ -1037,6 +1064,7 @@ export class TimeSliderControl implements IControl, DockController {
       s,
       resolveRange(
         this._allDates,
+        config.granularity,
         toDate(config.startDate),
         config.endDate == null ? null : toDate(config.endDate)
       )

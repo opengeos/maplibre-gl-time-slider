@@ -255,10 +255,10 @@ or the top-level `onChange(date)` callback to drive your own layers.
 ## Irregular dates (hiding no-data steps)
 
 By default the timeline is continuous: it walks `startDate` → `endDate` in fixed
-granularity units, whether or not each step has data. For a sparse archive that
-means mostly empty frames — a daily timeline over a three-year satellite series
-with 16 usable scenes draws ~1,000 ticks, and playback sits on "No data" for
-weeks at a time between them.
+granularity units, regardless of whether each step has data. For a sparse
+archive that means mostly empty frames — a daily timeline over a three-year
+satellite series with 16 usable scenes draws ~1,000 ticks, and playback sits on
+"No data" for weeks at a time between them.
 
 Pass `dates` to step through **only the dates that exist**:
 

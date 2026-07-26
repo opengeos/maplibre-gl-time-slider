@@ -710,9 +710,12 @@ function buildTimelineSection(controller: DockController): {
     'spaces, or newlines — or a URL to a JSON, CSV, or text file listing them. ' +
     'The timeline then steps through just these dates (Start/End clip the list, ' +
     'Interval steps N at a time). Leave blank for a continuous timeline.';
-  // Reports what a pasted URL resolved to (or why it did not).
+  // Reports what a pasted URL resolved to (or why it did not). Announced live,
+  // since the outcome of a fetch is otherwise invisible to a screen reader.
   const datesStatus = document.createElement('div');
   datesStatus.className = 'ts-dates-status';
+  datesStatus.setAttribute('role', 'status');
+  datesStatus.setAttribute('aria-live', 'polite');
   dates.row.appendChild(datesStatus);
   const interval = field('Interval', '', 'number');
   interval.input.min = '1';

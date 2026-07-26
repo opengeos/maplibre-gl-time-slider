@@ -180,8 +180,27 @@ describe('fetchDateList', () => {
 
   it('passes fetch options through', async () => {
     stubFetch('["2023-01-28"]');
-    const init = { headers: { authorization: 'token' } };
-    await fetchDateList('https://example.com/dates.json', init);
-    expect(fetch).toHaveBeenCalledWith('https://example.com/dates.json', init);
+    await fetchDateList('https://example.com/dates.json', {
+      headers: { authorization: 'token' },
+    });
+    expect(fetch).toHaveBeenCalledWith(
+      'https://example.com/dates.json',
+      expect.objectContaining({ headers: { authorization: 'token' } })
+    );
+  });
+
+  it('times out by default so an unresponsive host cannot hang the caller', async () => {
+    stubFetch('["2023-01-28"]');
+    await fetchDateList('https://example.com/dates.json');
+    const [, options] = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect((options as RequestInit).signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('lets a caller-supplied signal win over the default timeout', async () => {
+    stubFetch('["2023-01-28"]');
+    const controller = new AbortController();
+    await fetchDateList('https://example.com/dates.json', { signal: controller.signal });
+    const [, options] = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect((options as RequestInit).signal).toBe(controller.signal);
   });
 });

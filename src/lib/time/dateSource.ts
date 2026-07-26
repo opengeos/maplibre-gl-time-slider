@@ -22,6 +22,12 @@ type RawDate = string | number;
 export type DateListFormat = 'json' | 'csv' | 'text';
 
 /**
+ * How long {@link fetchDateList} waits before giving up, when the caller
+ * supplies no `AbortSignal` of its own.
+ */
+const DEFAULT_TIMEOUT_MS = 30_000;
+
+/**
  * Case-insensitive lookup of the first present key.
  *
  * @param record - The object to search
@@ -213,9 +219,10 @@ export function isDateListUrl(value: string): boolean {
  * - **Text** — one date per line, or separated by commas, semicolons, or spaces.
  *
  * @param url - URL of the document listing the dates
- * @param init - Optional fetch options (headers, abort signal, credentials)
+ * @param init - Optional fetch options (headers, abort signal, credentials).
+ *   Without a `signal`, the request times out after 30 seconds.
  * @returns The parsed dates, sorted and de-duplicated
- * @throws If the request fails or no dates can be parsed from the response
+ * @throws If the request fails, times out, or no dates can be parsed from it
  *
  * @example
  * ```typescript
@@ -224,7 +231,10 @@ export function isDateListUrl(value: string): boolean {
  * ```
  */
 export async function fetchDateList(url: string, init?: RequestInit): Promise<Date[]> {
-  const response = await fetch(url, init);
+  // An unresponsive host would otherwise leave the caller (and the dock's
+  // "Loading dates…" indicator) waiting forever. A caller-supplied signal wins.
+  const signal = init?.signal ?? AbortSignal.timeout(DEFAULT_TIMEOUT_MS);
+  const response = await fetch(url, { ...init, signal });
   if (!response.ok) {
     throw new Error(`Could not load dates: ${url} responded ${response.status}`);
   }
