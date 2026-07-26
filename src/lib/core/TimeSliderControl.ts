@@ -979,8 +979,9 @@ export class TimeSliderControl implements IControl, DockController {
   }
 
   /**
-   * Applies a live property patch to a managed source (opacity and, for COG,
-   * colormap/rescale).
+   * Applies a live property patch to a managed source: opacity and visibility
+   * for any type, plus the symbology (colormap/rescale/bands/nodata) of a COG or
+   * mosaic source.
    *
    * @param id - The source id
    * @param patch - Partial spec fields to merge

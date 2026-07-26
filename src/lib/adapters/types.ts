@@ -72,7 +72,8 @@ export interface SourceAdapter {
   setVisible(visible: boolean): void;
 
   /**
-   * Applies a live property patch (e.g. colormap/rescale for COG layers).
+   * Applies a live property patch (e.g. colormap/rescale for COG and mosaic
+   * layers).
    *
    * @param patch - Partial spec fields to merge
    */

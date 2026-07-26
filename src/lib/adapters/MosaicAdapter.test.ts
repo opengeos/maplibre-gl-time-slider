@@ -153,6 +153,61 @@ describe('MosaicAdapter', () => {
     expect(state.rescale).toEqual([[0, 3000]]);
   });
 
+  it('applies a symbology change to the layer on screen without refetching', async () => {
+    const { map } = createStubMap();
+    const adapter = new MosaicAdapter(
+      { type: 'mosaic', id: 'm-sym', url: 'https://e/{YYYY}_{MM}.json', bidx: [1] },
+      { map }
+    );
+    await adapter.add(d1);
+    await adapter.setProperty({ colormap: 'viridis', rescale: [0, 30] } as never);
+
+    const mgr = lastManager();
+    // Only the visualization changed, so the manifest is not loaded again.
+    expect(mgr.addCalls).toHaveLength(1);
+    const patch = mgr.stateCalls.at(-1)!.patch;
+    expect(patch.colormap).toBe('viridis');
+    expect(patch.rescale).toEqual([[0, 30]]);
+    // The merged spec is what a later render and getSources() report.
+    expect(adapter.spec.colormap).toBe('viridis');
+  });
+
+  it('re-renders the current date when a symbology field is cleared', async () => {
+    // setState merges, so dropping a key would leave the old colormap applied;
+    // only a fresh render rebuilds the state from the spec alone.
+    const { map } = createStubMap();
+    const adapter = new MosaicAdapter(
+      { type: 'mosaic', id: 'm-clear', url: 'https://e/{YYYY}_{MM}.json', colormap: 'jet' },
+      { map }
+    );
+    await adapter.add(d1);
+    await adapter.setProperty({ colormap: undefined } as never);
+
+    const mgr = lastManager();
+    expect(mgr.addCalls).toHaveLength(2);
+    // Same date, so the same manifest — reloaded rather than left stale.
+    expect(mgr.addCalls[1].source).toBe('https://e/2024_05.json');
+    expect((mgr.addCalls[1].options.state as Record<string, unknown>).colormap).toBeUndefined();
+    // Re-rendering must not re-fit the view onto the user's current camera.
+    expect(mgr.addCalls[1].options.zoomTo).toBe(false);
+    // The superseded layer is dropped, not left stacked under the new one.
+    expect(mgr.removed).toContain(mgr.addCalls[0].options.id as string);
+  });
+
+  it('keeps a symbology patch for the next render when nothing is on screen', async () => {
+    const { map } = createStubMap();
+    const adapter = new MosaicAdapter(
+      { type: 'mosaic', id: 'm-early', url: 'https://e/{YYYY}_{MM}.json' },
+      { map }
+    );
+    // No date rendered yet, so there is no layer to patch.
+    await adapter.setProperty({ colormap: 'magma' } as never);
+    await adapter.add(d1);
+
+    const state = lastManager().addCalls[0].options.state as Record<string, unknown>;
+    expect(state.colormap).toBe('magma');
+  });
+
   it('omits rescale when the channel count cannot be inferred', async () => {
     const { map } = createStubMap();
     const adapter = new MosaicAdapter(

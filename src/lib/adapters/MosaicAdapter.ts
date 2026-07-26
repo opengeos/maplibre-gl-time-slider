@@ -1,4 +1,4 @@
-import type { MosaicSourceSpec } from '../core/types';
+import type { MosaicSourceSpec, SourceSpec } from '../core/types';
 import { resolveUrl } from '../template/urlTemplate';
 import { clamp, generateId } from '../utils/helpers';
 import { BaseAdapter } from './BaseAdapter';
@@ -18,6 +18,23 @@ interface MosaicRasterState {
   colormap: string;
   rescale: [number, number][] | null;
   nodata: number | 'off' | 'auto';
+}
+
+/**
+ * Spec fields that feed the rendered visualization state rather than the URL,
+ * so a change to one can be applied without reloading the manifest.
+ */
+const SYMBOLOGY_KEYS = ['colormap', 'bidx', 'rescale', 'nodata'] as const;
+
+/**
+ * Whether a patched value means "remove this field" rather than "set it".
+ *
+ * @param value - The patched value.
+ * @returns True for undefined, null, an empty string, or an empty array.
+ */
+function isUnset(value: unknown): boolean {
+  if (value === undefined || value === null || value === '') return true;
+  return Array.isArray(value) && value.length === 0;
 }
 
 /** Options accepted by `LayerManager.addRaster` that this adapter uses. */
@@ -327,6 +344,44 @@ export class MosaicAdapter extends BaseAdapter {
     if (this.manager && this.rasterId && this.manager.getLayer(this.rasterId)) {
       this.manager.setVisible(this.rasterId, visible);
     }
+  }
+
+  /**
+   * Updates the mosaic's symbology (colormap, bands, rescale window, nodata) and
+   * applies it to the layer on screen.
+   *
+   * The rendered state is derived from the spec by {@link buildState}, so the
+   * patch is merged into the spec first and the whole state pushed through
+   * `setState` — no manifest refetch, since only the visualization changed.
+   *
+   * Clearing a field is the exception. `setState` merges, so dropping a key from
+   * the patch leaves the previous value in place: removing a colormap would
+   * never take effect. A patch that clears any symbology field therefore
+   * re-renders the current date from scratch, where {@link buildState} rebuilds
+   * the state from the spec alone and an absent field genuinely means "unset".
+   *
+   * @param patch - Partial spec fields to merge.
+   */
+  async setProperty(patch: Partial<SourceSpec>): Promise<void> {
+    // `SourceSpec` is a union, so the symbology keys are not present on every
+    // member; read the patch as a bag of fields to test them.
+    const fields = patch as Record<string, unknown>;
+    const clearsField = SYMBOLOGY_KEYS.some((key) => key in fields && isUnset(fields[key]));
+    Object.assign(this.spec, patch);
+
+    const manager = this.manager;
+    if (!clearsField && manager && this.rasterId && manager.getLayer(this.rasterId)) {
+      manager.setState(this.rasterId, this.buildState());
+      return;
+    }
+    // Nothing is on screen yet (no date rendered, or the current date has no
+    // data), so the patched spec is picked up by the next render on its own.
+    if (!this.lastDate) return;
+    // render() short-circuits when the resolved URL is unchanged, which is
+    // exactly this case — drop the guard so the reload actually happens.
+    const date = this.lastDate;
+    this.currentUrl = null;
+    await this.render(date);
   }
 
   remove(): void {
