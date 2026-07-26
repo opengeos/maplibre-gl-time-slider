@@ -20,6 +20,7 @@ export default defineConfig({
         pace: resolve(__dirname, 'examples/pace/index.html'),
         worldview: resolve(__dirname, 'examples/worldview/index.html'),
         landsat: resolve(__dirname, 'examples/landsat/index.html'),
+        emit: resolve(__dirname, 'examples/emit/index.html'),
       },
     },
   },

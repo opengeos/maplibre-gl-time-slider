@@ -9,7 +9,8 @@ import type {
   TimeSliderState,
 } from './types';
 import { GRANULARITIES, toDate } from '../time/granularity';
-import { nextStep, prevStep, snapToStep } from '../time/timeline';
+import { clipDates, normalizeDates } from '../time/dateList';
+import { createTimeScale, type TimeScale } from '../time/scale';
 import { clamp } from '../utils/helpers';
 import { createAdapter } from '../adapters/registry';
 import type { SourceAdapter } from '../adapters/types';
@@ -34,6 +35,42 @@ interface ResolvedOptions {
   beforeId?: string;
   sources: SourceSpec[];
   onChange?: (date: Date) => void;
+}
+
+/**
+ * The range fields derived from the requested bounds and, for an ordinal
+ * timeline, the stored date list.
+ */
+type RangeFields = Pick<TimeSliderState, 'startDate' | 'endDate' | 'endDateAuto' | 'dates'>;
+
+/**
+ * Resolves a timeline range. With an explicit date list the requested bounds
+ * act as clips and the list's own first/last entries become the range, so the
+ * timeline can never extend past the data. Without one, the bounds are the
+ * range, and an absent end stays "open" (defaulted to now, re-resolved on load).
+ *
+ * @param allDates - The unclipped date list, or undefined for a continuous timeline
+ * @param start - Requested range start (a clip when `allDates` is given)
+ * @param end - Requested range end; `null`/`undefined` leaves it open
+ * @returns The range fields to write into state
+ */
+function resolveRange(allDates?: Date[], start?: Date, end?: Date | null): RangeFields {
+  if (allDates && allDates.length > 0) {
+    const dates = clipDates(allDates, start, end ?? undefined);
+    return {
+      dates,
+      startDate: new Date(dates[0].getTime()),
+      endDate: new Date(dates[dates.length - 1].getTime()),
+      // The list bounds the timeline, so there is no open end to re-resolve.
+      endDateAuto: false,
+    };
+  }
+  return {
+    dates: undefined,
+    startDate: start ?? new Date(),
+    endDate: end == null ? new Date() : end,
+    endDateAuto: end == null,
+  };
 }
 
 /**
@@ -65,6 +102,10 @@ export class TimeSliderControl implements IControl, DockController {
   private _savedContainerCss?: string;
   private _view?: DockView;
   private _state: TimeSliderState;
+  private _scale: TimeScale;
+  /** The full ordinal date list as supplied, before start/end clipping. Kept so
+   * a later range change re-clips the original rather than eroding the list. */
+  private _allDates?: Date[];
   private _options: ResolvedOptions;
   private _adapters: SourceAdapter[] = [];
   private _eventHandlers: EventHandlersMap = new globalThis.Map();
@@ -80,28 +121,38 @@ export class TimeSliderControl implements IControl, DockController {
    * @param options - Configuration options
    */
   constructor(options: TimeSliderOptions) {
-    const startDate = toDate(options.startDate);
+    const dates = options.dates ? normalizeDates(options.dates) : undefined;
+    if (!dates?.length && options.startDate == null) {
+      throw new TypeError(
+        'TimeSliderControl requires either `startDate` or a non-empty `dates` list.'
+      );
+    }
+    this._allDates = dates?.length ? dates : undefined;
     // An omitted end date is "open": default it to now so the timeline always
     // reaches the latest data, and remember it was auto so getConfig() leaves it
-    // out and a restored config re-resolves to the then-current date.
-    const endDateAuto = options.endDate == null;
-    const endDate = options.endDate == null ? new Date() : toDate(options.endDate);
+    // out and a restored config re-resolves to the then-current date. With a
+    // date list, start/end are only clips and the list sets the actual range.
+    const range = resolveRange(
+      this._allDates,
+      options.startDate == null ? undefined : toDate(options.startDate),
+      options.endDate == null ? null : toDate(options.endDate)
+    );
     const interval = Math.max(1, Math.floor(options.interval ?? 1));
     const granularity = options.granularity ?? 'day';
-    const initial = options.initialDate ? toDate(options.initialDate) : startDate;
+    const initial = options.initialDate ? toDate(options.initialDate) : range.startDate;
 
     this._state = {
       collapsed: options.collapsed ?? false,
-      startDate,
-      endDate,
-      endDateAuto,
+      ...range,
       interval,
       granularity,
-      currentDate: snapToStep(initial, startDate, endDate, interval, granularity),
+      currentDate: new Date(range.startDate.getTime()),
       isPlaying: false,
       speed: Math.max(100, options.speed ?? 1000),
       loop: options.loop ?? true,
     };
+    this._scale = createTimeScale(this._state);
+    this._state.currentDate = this._scale.snap(initial);
 
     this._options = {
       granularities: options.granularities ?? GRANULARITIES,
@@ -200,7 +251,33 @@ export class TimeSliderControl implements IControl, DockController {
       currentDate: new Date(this._state.currentDate),
       startDate: new Date(this._state.startDate),
       endDate: new Date(this._state.endDate),
+      dates: this._state.dates?.map((d) => new Date(d.getTime())),
     };
+  }
+
+  /**
+   * Returns the scale mapping dates onto the axis — ordinal when an explicit
+   * date list is active, continuous otherwise. Used by the axis renderer to
+   * position the marker and generate ticks.
+   */
+  getScale(): TimeScale {
+    return this._scale;
+  }
+
+  /**
+   * Returns the explicit dates the timeline steps through (unclipped, as
+   * supplied), or `undefined` for a continuous timeline.
+   */
+  getDates(): Date[] | undefined {
+    return this._allDates?.map((d) => new Date(d.getTime()));
+  }
+
+  /**
+   * Rebuilds the scale from the current state. Must be called after any change
+   * to the range, interval, granularity, or date list.
+   */
+  private _rebuildScale(): void {
+    this._scale = createTimeScale(this._state);
   }
 
   /**
@@ -463,7 +540,7 @@ export class TimeSliderControl implements IControl, DockController {
    */
   goTo(date: Date): void {
     const s = this._state;
-    const snapped = snapToStep(date, s.startDate, s.endDate, s.interval, s.granularity);
+    const snapped = this._scale.snap(date);
     if (snapped.getTime() === s.currentDate.getTime()) return;
     s.currentDate = snapped;
     this._view?.syncDate();
@@ -476,7 +553,7 @@ export class TimeSliderControl implements IControl, DockController {
    */
   next(): void {
     const s = this._state;
-    const candidate = nextStep(s.currentDate, s.startDate, s.endDate, s.interval, s.granularity);
+    const candidate = this._scale.next(s.currentDate);
     if (candidate.getTime() === s.currentDate.getTime()) {
       if (s.loop) this.goTo(s.startDate);
     } else {
@@ -489,7 +566,7 @@ export class TimeSliderControl implements IControl, DockController {
    */
   prev(): void {
     const s = this._state;
-    const candidate = prevStep(s.currentDate, s.startDate, s.endDate, s.interval, s.granularity);
+    const candidate = this._scale.prev(s.currentDate);
     if (candidate.getTime() === s.currentDate.getTime()) {
       if (s.loop) this.goTo(s.endDate);
     } else {
@@ -539,7 +616,7 @@ export class TimeSliderControl implements IControl, DockController {
    */
   private _advance(): void {
     const s = this._state;
-    const candidate = nextStep(s.currentDate, s.startDate, s.endDate, s.interval, s.granularity);
+    const candidate = this._scale.next(s.currentDate);
     if (candidate.getTime() === s.currentDate.getTime()) {
       if (s.loop) this.goTo(s.startDate);
       else this.pause();
@@ -621,7 +698,8 @@ export class TimeSliderControl implements IControl, DockController {
 
   /**
    * Changes the active granularity, resetting the interval to 1 and re-snapping
-   * the current date.
+   * the current date. On an ordinal timeline the date list keeps setting the
+   * step size, so this only changes the tick label and date-display formats.
    *
    * @param granularity - The new granularity
    */
@@ -630,7 +708,8 @@ export class TimeSliderControl implements IControl, DockController {
     const prev = s.currentDate.getTime();
     s.granularity = granularity;
     s.interval = 1;
-    s.currentDate = snapToStep(s.currentDate, s.startDate, s.endDate, s.interval, granularity);
+    this._rebuildScale();
+    s.currentDate = this._scale.snap(s.currentDate);
     this._view?.syncGranularity();
     this._view?.syncDate();
     this._notifyDateChanged(s.currentDate, prev);
@@ -663,6 +742,10 @@ export class TimeSliderControl implements IControl, DockController {
    * Updates the timeline range (and optionally interval/granularity),
    * re-snapping the current date.
    *
+   * On an ordinal timeline the bounds clip the date list instead of defining
+   * the range: the resulting range is the first/last date that survives the
+   * clip, and a clip that would empty the list is ignored.
+   *
    * @param start - New range start
    * @param end - New range end. Pass `null` (or omit) to leave the end "open":
    *   it defaults to the current date and is treated as auto, so it re-resolves
@@ -678,14 +761,55 @@ export class TimeSliderControl implements IControl, DockController {
   ): void {
     const s = this._state;
     const prev = s.currentDate.getTime();
-    s.startDate = toDate(start);
-    s.endDateAuto = end == null;
-    s.endDate = end == null ? new Date() : toDate(end);
+    Object.assign(s, resolveRange(this._allDates, toDate(start), end == null ? null : toDate(end)));
     if (interval != null) s.interval = Math.max(1, Math.floor(interval));
     if (granularity != null) s.granularity = granularity;
-    s.currentDate = snapToStep(s.currentDate, s.startDate, s.endDate, s.interval, s.granularity);
+    this._rebuildScale();
+    s.currentDate = this._scale.snap(s.currentDate);
     this._view?.syncRange();
     this._view?.syncGranularity();
+    this._view?.syncDate();
+    this._notifyDateChanged(s.currentDate, prev);
+    this._emit('rangechange');
+    this._emit('statechange');
+  }
+
+  /**
+   * Replaces the explicit dates the timeline steps through, switching it to an
+   * ordinal timeline that visits only those dates (see
+   * {@link TimeSliderOptions.dates}). Any existing start/end clip is dropped, so
+   * the whole list is shown; the range becomes the list's first and last entry.
+   *
+   * Use this when the dates are only known after an async lookup — a bucket
+   * listing, a STAC search, or any other catalog request:
+   *
+   * @example
+   * ```typescript
+   * const slider = new TimeSliderControl({ startDate: '2023-01-01', sources: [...] });
+   * map.addControl(slider, 'bottom-left');
+   * slider.setDates(await fetchAvailableDates());
+   * ```
+   *
+   * @param dates - The dates to step through. Pass `null`, `undefined`, or an
+   *   empty list to drop back to a continuous timeline over the same span.
+   */
+  setDates(dates?: Array<Date | string | number> | null): void {
+    const s = this._state;
+    const prev = s.currentDate.getTime();
+    const list = dates ? normalizeDates(dates) : [];
+    this._allDates = list.length > 0 ? list : undefined;
+    Object.assign(
+      s,
+      this._allDates
+        ? resolveRange(this._allDates)
+        : // Dropping the list leaves a continuous timeline spanning whatever the
+          // list last covered, so the dock does not jump to an unrelated range.
+          resolveRange(undefined, s.startDate, s.endDate)
+    );
+    this._rebuildScale();
+    s.currentDate = this._scale.snap(s.currentDate);
+    this._view?.syncRange();
+    this._view?.syncGranularities();
     this._view?.syncDate();
     this._notifyDateChanged(s.currentDate, prev);
     this._emit('rangechange');
@@ -807,6 +931,8 @@ export class TimeSliderControl implements IControl, DockController {
       // Omit an auto (open) end so a restored config re-resolves it to the
       // then-current date rather than pinning it to this save time.
       ...(s.endDateAuto ? {} : { endDate: s.endDate.toISOString() }),
+      // Saved unclipped: startDate/endDate above re-apply as clips on restore.
+      ...(this._allDates ? { dates: this._allDates.map((d) => d.toISOString()) } : {}),
       interval: s.interval,
       granularity: s.granularity,
       granularities: [...this._options.granularities],
@@ -836,20 +962,22 @@ export class TimeSliderControl implements IControl, DockController {
     this._adapters = [];
 
     const s = this._state;
-    s.startDate = toDate(config.startDate);
+    const dates = config.dates ? normalizeDates(config.dates) : undefined;
+    this._allDates = dates?.length ? dates : undefined;
     // A missing end date means the saved range was open: re-resolve it to the
     // current date so reopening an old project still reaches the latest data.
-    s.endDateAuto = config.endDate == null;
-    s.endDate = config.endDate == null ? new Date() : toDate(config.endDate);
+    Object.assign(
+      s,
+      resolveRange(
+        this._allDates,
+        toDate(config.startDate),
+        config.endDate == null ? null : toDate(config.endDate)
+      )
+    );
     s.interval = Math.max(1, Math.floor(config.interval));
     s.granularity = config.granularity;
-    s.currentDate = snapToStep(
-      toDate(config.currentDate),
-      s.startDate,
-      s.endDate,
-      s.interval,
-      s.granularity
-    );
+    this._rebuildScale();
+    s.currentDate = this._scale.snap(toDate(config.currentDate));
     s.speed = Math.max(100, config.speed);
     s.loop = config.loop;
     if (config.autoPlay !== undefined) this._options.autoPlay = config.autoPlay;
@@ -975,6 +1103,9 @@ export class TimeSliderControl implements IControl, DockController {
    */
   private _syncAll(): void {
     this._view?.syncRange();
+    // Rebuild (not just re-highlight) the pills: an ordinal timeline hides them,
+    // so restoring a config can flip their visibility either way.
+    this._view?.syncGranularities();
     this._view?.syncGranularity();
     this._view?.syncDate();
     this._view?.syncControls();

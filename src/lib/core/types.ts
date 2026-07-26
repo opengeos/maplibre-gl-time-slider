@@ -366,18 +366,50 @@ export type SourceSpec = ResolvedSourceSpec | CustomSourceSpec;
  */
 export interface TimeSliderOptions {
   /**
-   * Inclusive start of the timeline range.
+   * Inclusive start of the timeline range. Required unless {@link dates} is
+   * given, in which case it is optional and acts as a lower clip on that list.
    */
-  startDate: Date | string;
+  startDate?: Date | string;
 
   /**
    * Inclusive end of the timeline range. When omitted, defaults to the current
    * date so the timeline always reaches the latest available data. An end that
    * is defaulted this way is treated as "open": {@link TimeSliderControl.getConfig}
    * omits it, so a persisted config re-resolves to the then-current date on load.
+   *
+   * With {@link dates}, this acts as an upper clip on that list instead.
    * @default the current date
    */
   endDate?: Date | string;
+
+  /**
+   * Explicit dates the timeline steps through, for data that exists only at
+   * irregular times (a satellite series with cloudy days missing, an event
+   * archive, occasional survey dates). Supplying it switches the timeline from
+   * continuous to **ordinal**: only these dates get a tick, each occupies an
+   * equal slice of the axis, and scrubbing and playback can never land on a
+   * date that has no data. Without it, a daily timeline spanning a sparse
+   * three-year archive draws a tick for all ~1,100 days.
+   *
+   * The list is normalized on the way in (parsed, de-duplicated, sorted), so
+   * order does not matter and duplicates are harmless. Where the dates come
+   * from is up to the caller — a hardcoded array, a bucket listing, a STAC
+   * search, or your own API. Use {@link TimeSliderControl.setDates} to supply
+   * them after an async lookup.
+   *
+   * {@link startDate} / {@link endDate} become optional clips on the list, and
+   * {@link interval} steps N entries at a time. {@link granularity} no longer
+   * controls the step size (the list does), only the tick label format.
+   *
+   * @example
+   * ```typescript
+   * new TimeSliderControl({
+   *   dates: ['2023-01-28', '2023-02-20', '2023-03-27', '2025-10-03'],
+   *   sources: [{ type: 'cog', url: 'https://example.com/{date:YYYYMMDD}.tif' }],
+   * });
+   * ```
+   */
+  dates?: Array<Date | string | number>;
 
   /**
    * Number of {@link granularity} units between consecutive steps.
@@ -502,7 +534,15 @@ export interface TimeSliderState {
   endDateAuto: boolean;
 
   /**
-   * Steps between marker positions, in granularity units.
+   * The explicit dates this timeline steps through, when it is ordinal (see
+   * {@link TimeSliderOptions.dates}), already clipped to
+   * {@link startDate}/{@link endDate}. Undefined for a continuous timeline.
+   */
+  dates?: Date[];
+
+  /**
+   * Steps between marker positions: granularity units on a continuous timeline,
+   * entries of {@link dates} on an ordinal one.
    */
   interval: number;
 
@@ -544,6 +584,12 @@ export interface TimeSliderConfig {
    * the end to the then-current date instead of pinning it to the save time.
    */
   endDate?: string;
+  /**
+   * ISO dates for an ordinal timeline (see {@link TimeSliderOptions.dates}),
+   * unclipped: `startDate`/`endDate` re-apply as clips when restored. Omitted
+   * for a continuous timeline.
+   */
+  dates?: string[];
   interval: number;
   granularity: Granularity;
   currentDate: string;

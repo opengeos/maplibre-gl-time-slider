@@ -46,7 +46,7 @@ const LABEL_UNIT: Record<Granularity, Granularity> = {
  * @param max - Maximum desired tick count
  * @returns A step multiple from a set of round numbers
  */
-function niceMultiple(count: number, max: number): number {
+export function niceMultiple(count: number, max: number): number {
   if (count <= max) return 1;
   const candidates = [1, 2, 3, 5, 10, 20, 25, 50, 100, 200, 500, 1000];
   for (const m of candidates) {

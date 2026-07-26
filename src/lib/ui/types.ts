@@ -1,5 +1,6 @@
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { Granularity, SourceSpec, TimeSliderState } from '../core/types';
+import type { TimeScale } from '../time/scale';
 
 /**
  * The slice of the control's public API that the dock UI depends on. UI modules
@@ -9,6 +10,8 @@ import type { Granularity, SourceSpec, TimeSliderState } from '../core/types';
 export interface DockController {
   /** Current observable state. */
   getState(): TimeSliderState;
+  /** Maps dates onto the axis and defines the steps between them. */
+  getScale(): TimeScale;
   /** Granularities offered as zoom pills. */
   getGranularities(): Granularity[];
   /** Token format for the large date display. */

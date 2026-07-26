@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createAxis } from './axisRenderer';
 import { createLayersPopover } from './layersPopover';
 import type { DockController } from './types';
+import { createTimeScale } from '../time/scale';
 import type { SourceSpec, TimeSliderState } from '../core/types';
 
 const STATE: TimeSliderState = {
@@ -18,8 +19,12 @@ const STATE: TimeSliderState = {
 };
 
 function baseController(overrides: Partial<DockController> = {}): DockController {
+  const getState = overrides.getState ?? ((): TimeSliderState => ({ ...STATE }));
   return {
-    getState: () => ({ ...STATE }),
+    getState,
+    // Derived from whatever state the test supplies, so an overridden range or
+    // date list drives the axis exactly as it would in the real control.
+    getScale: () => createTimeScale(getState()),
     getGranularities: () => ['hour', 'day', 'month', 'year'],
     getDateFormat: () => 'YYYY-MM-DD',
     getTheme: () => 'auto',
@@ -348,7 +353,11 @@ describe('layersPopover', () => {
     const setGranularities = vi.fn();
     const setSpeed = vi.fn();
     const goTo = vi.fn();
-    const existing: SourceSpec = { id: 'chla', type: 'mosaic', url: 'https://x/{date:YYYYMMDD}.json' };
+    const existing: SourceSpec = {
+      id: 'chla',
+      type: 'mosaic',
+      url: 'https://x/{date:YYYYMMDD}.json',
+    };
     const popover = createLayersPopover(
       baseController({
         getSources: () => [existing],
