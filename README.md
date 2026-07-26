@@ -355,6 +355,11 @@ with no reshaping. The same parser is exported standalone as `fetchDateList(url,
 init?)` if you want the dates without applying them. A failed load throws and
 leaves the current timeline untouched.
 
+`examples/emit/` ships both shapes for its 16 irregular scenes —
+[`chla_dates.json`](examples/emit/chla_dates.json) (a plain array) and
+[`chla_dates.csv`](examples/emit/chla_dates.csv) (a `datetime` column beside the
+granule ids) — as a template for a list you host yourself.
+
 `getConfig()` records the URL next to the resolved dates, so restoring a saved
 project is offline-safe and never refetches.
 

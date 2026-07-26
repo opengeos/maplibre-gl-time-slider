@@ -10,6 +10,12 @@ export default defineConfig({
   base: '/maplibre-gl-time-slider/',
   build: {
     outDir: 'dist-examples',
+    // The EMIT example's date lists are small enough that Vite would inline
+    // them as base64 `data:` URIs. Keep them as real files: they are meant to be
+    // fetched (and pasted into the timeline's Dates field) like any other
+    // catalog, which a data URI cannot demonstrate.
+    assetsInlineLimit: (filePath: string) =>
+      /chla_dates\.(json|csv)$/.test(filePath) ? false : undefined,
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'index.html'),

@@ -1,7 +1,12 @@
 import maplibregl from 'maplibre-gl';
-import { TimeSliderControl } from '../../src/index';
+import { TimeSliderControl, fetchDateList } from '../../src/index';
 import '../../src/index.css';
 import 'maplibre-gl/dist/maplibre-gl.css';
+// The scene dates, checked in next to this example. `?url` hands back the URL
+// (and emits the file as a build asset) rather than inlining the contents, so
+// the timeline fetches it exactly as it would any other catalog.
+import chlaDatesUrl from './chla_dates.json?url';
+import chlaDatesCsvUrl from './chla_dates.csv?url';
 
 // EMIT chlorophyll-a retrievals over Apalachicola Bay, Florida. EMIT images a
 // given place only when its orbit happens to pass over it under clear skies, so
@@ -18,9 +23,9 @@ const BASE =
 // Each date has a small STAC FeatureCollection listing that scene's COG.
 const MOSAIC_URL = `${BASE}/json/{date:YYYYMMDD}_chla.json`;
 
-// The dates the archive actually holds. Hardcoding them is the simplest way to
-// use the feature; `listScenes()` below derives the same list from the catalog,
-// which is what you would do for an archive that keeps growing.
+// The dates the archive holds, inline. Kept as a fallback so the example still
+// runs offline; `chla_dates.json` next to this file carries the same list, and
+// `listScenes()` below derives it from the catalog instead.
 const KNOWN_DATES = [
   '2023-01-28',
   '2023-02-20',
@@ -41,8 +46,8 @@ const KNOWN_DATES = [
 ];
 
 /**
- * Derives the available dates from the file listing rather than hardcoding
- * them, so new scenes appear on the timeline as soon as they are published.
+ * Derives the available dates from the archive's own file listing, so new
+ * scenes appear on the timeline as soon as they are published.
  *
  * Nothing about this is specific to Hugging Face — the control only ever
  * consumes an array of dates. Swap this for an S3/R2 listing, a STAC search, a
@@ -68,6 +73,26 @@ async function listScenes(): Promise<string[]> {
     return dates.length > 0 ? dates : KNOWN_DATES;
   } catch {
     return KNOWN_DATES;
+  }
+}
+
+/**
+ * Resolves the scene dates, preferring the checked-in `chla_dates.json`.
+ *
+ * `fetchDateList` accepts JSON, CSV, or plain text, so the same call works
+ * against `chla_dates.csv` (a `datetime` column beside the granule ids), a STAC
+ * search response, or a bucket listing — see {@link listScenes} for the
+ * live-catalog variant. Every path here ends in a plain array of dates.
+ *
+ * @returns The dates to build the timeline from
+ */
+async function resolveDates(): Promise<Array<Date | string>> {
+  try {
+    return await fetchDateList(chlaDatesUrl);
+  } catch {
+    // The shipped list is unreachable (offline, or a stale asset URL): ask the
+    // archive itself, and fall back to the inline list from there.
+    return listScenes();
   }
 }
 
@@ -98,7 +123,7 @@ map.addControl(new maplibregl.FullscreenControl(), 'top-right');
 map.addControl(new maplibregl.GlobeControl(), 'top-right');
 
 map.on('load', async () => {
-  const dates = await listScenes();
+  const dates = await resolveDates();
 
   const timeSlider = new TimeSliderControl({
     // The list *is* the timeline: no startDate/endDate needed, the range comes
@@ -128,5 +153,12 @@ map.on('load', async () => {
 
   // If the catalog lookup had to happen after the control was already on the
   // map, `timeSlider.setDates(dates)` applies the list live and re-snaps the
-  // marker onto the nearest date that has data.
+  // marker onto the nearest date that has data — and `timeSlider.loadDates(url)`
+  // does both steps in one, fetching and parsing the document itself.
+  //
+  // The "+ Add data" panel exposes the same thing without any code: paste either
+  // URL below into its Timeline > Dates field to rebuild this timeline from the
+  // JSON list or from the CSV's `datetime` column.
+  console.log('Dates as JSON:', new URL(chlaDatesUrl, location.href).href);
+  console.log('Dates as CSV: ', new URL(chlaDatesCsvUrl, location.href).href);
 });
