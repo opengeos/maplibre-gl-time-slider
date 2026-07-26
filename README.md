@@ -190,6 +190,14 @@ mosaic is composited client-side, so it takes the renderer's own vocabulary.
   is left untouched). Slower than the GPU engine, and it needs `cog-tiler-wasm`
   and its peers installed alongside `maplibre-gl-raster` (both are lazy-loaded).
 
+  > **Use `cog-tiler-wasm` >= 0.3.1.** Earlier versions draw a one-pixel
+  > coloured border around every nodata boundary — a blue ring under `jet`
+  > tracing coastlines and swath edges. Their bilinear samplers interpolated raw
+  > pixels and only then tested the result against the nodata sentinel, so a
+  > pixel beside nodata blended toward it, matched neither the sentinel nor NaN,
+  > and clamped to the bottom of the rescale window. The `'gpu'` engine is
+  > unaffected.
+
 Rendering is delegated to
 [`maplibre-gl-raster`](https://github.com/opengeos/maplibre-gl-raster) (an
 **optional peer dependency**), imported lazily the first time a mosaic source is
