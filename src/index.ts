@@ -36,6 +36,13 @@ export {
 } from './lib/time/dateList';
 export { createTimeScale } from './lib/time/scale';
 export type { TimeScale, TimeScaleParams } from './lib/time/scale';
+export {
+  fetchDateList,
+  parseDateList,
+  detectDateListFormat,
+  isDateListUrl,
+} from './lib/time/dateSource';
+export type { DateListFormat } from './lib/time/dateSource';
 
 // Templating
 export { formatDate } from './lib/template/dateFormat';

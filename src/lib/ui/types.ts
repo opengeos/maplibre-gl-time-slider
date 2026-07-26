@@ -56,6 +56,17 @@ export interface DockController {
     interval?: number,
     granularity?: Granularity
   ): void;
+  /**
+   * Replace the explicit dates the timeline steps through. Pass `null` for a
+   * continuous timeline.
+   */
+  setDates(dates?: Array<Date | string | number> | null): void;
+  /** Fetch the date list from a JSON / CSV / text URL and apply it. */
+  loadDates(url: string, init?: RequestInit): Promise<Date[]>;
+  /** The explicit dates (unclipped), or undefined when the timeline is continuous. */
+  getDates(): Date[] | undefined;
+  /** URL the date list was loaded from, if it came from one. */
+  getDatesUrl(): string | undefined;
   /** Collapse (hide) the dock. */
   collapse(): void;
 

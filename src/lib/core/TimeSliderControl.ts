@@ -9,7 +9,8 @@ import type {
   TimeSliderState,
 } from './types';
 import { GRANULARITIES, toDate } from '../time/granularity';
-import { clipDates, normalizeDates } from '../time/dateList';
+import { clipDates, collapseByUnit, normalizeDates } from '../time/dateList';
+import { fetchDateList } from '../time/dateSource';
 import { createTimeScale, type TimeScale } from '../time/scale';
 import { clamp } from '../utils/helpers';
 import { createAdapter } from '../adapters/registry';
@@ -74,6 +75,23 @@ function resolveRange(allDates?: Date[], start?: Date, end?: Date | null): Range
 }
 
 /**
+ * Turns caller-supplied dates into the canonical ordinal list: parsed, sorted,
+ * de-duplicated, then collapsed so at most one step falls in each granularity
+ * unit (see {@link collapseByUnit}).
+ *
+ * @param dates - Dates as supplied
+ * @param granularity - The active granularity
+ * @returns The canonical list, or undefined when nothing usable remains
+ */
+function ingestDates(
+  dates: Array<Date | string | number>,
+  granularity: Granularity
+): Date[] | undefined {
+  const list = collapseByUnit(normalizeDates(dates), granularity);
+  return list.length > 0 ? list : undefined;
+}
+
+/**
  * A MapLibre GL control presenting a NASA-Worldview-style bottom-docked
  * timeline. Time is modeled as a continuous date range plus an interval; the
  * control manages map sources/layers for built-in data types (COG, XYZ/WMTS,
@@ -106,6 +124,10 @@ export class TimeSliderControl implements IControl, DockController {
   /** The full ordinal date list as supplied, before start/end clipping. Kept so
    * a later range change re-clips the original rather than eroding the list. */
   private _allDates?: Date[];
+  /** URL the current date list was loaded from, when it came from one. Kept for
+   * display and serialization; the resolved dates are what actually drive the
+   * timeline, so a restored config never has to refetch. */
+  private _datesUrl?: string;
   private _options: ResolvedOptions;
   private _adapters: SourceAdapter[] = [];
   private _eventHandlers: EventHandlersMap = new globalThis.Map();
@@ -121,13 +143,14 @@ export class TimeSliderControl implements IControl, DockController {
    * @param options - Configuration options
    */
   constructor(options: TimeSliderOptions) {
-    const dates = options.dates ? normalizeDates(options.dates) : undefined;
+    const granularity = options.granularity ?? 'day';
+    const dates = options.dates ? ingestDates(options.dates, granularity) : undefined;
     if (!dates?.length && options.startDate == null) {
       throw new TypeError(
         'TimeSliderControl requires either `startDate` or a non-empty `dates` list.'
       );
     }
-    this._allDates = dates?.length ? dates : undefined;
+    this._allDates = dates;
     // An omitted end date is "open": default it to now so the timeline always
     // reaches the latest data, and remember it was auto so getConfig() leaves it
     // out and a restored config re-resolves to the then-current date. With a
@@ -138,7 +161,6 @@ export class TimeSliderControl implements IControl, DockController {
       options.endDate == null ? null : toDate(options.endDate)
     );
     const interval = Math.max(1, Math.floor(options.interval ?? 1));
-    const granularity = options.granularity ?? 'day';
     const initial = options.initialDate ? toDate(options.initialDate) : range.startDate;
 
     this._state = {
@@ -270,6 +292,14 @@ export class TimeSliderControl implements IControl, DockController {
    */
   getDates(): Date[] | undefined {
     return this._allDates?.map((d) => new Date(d.getTime()));
+  }
+
+  /**
+   * Returns the URL the current date list was loaded from via
+   * {@link loadDates}, or `undefined` when the list was supplied directly.
+   */
+  getDatesUrl(): string | undefined {
+    return this._datesUrl;
   }
 
   /**
@@ -796,15 +826,17 @@ export class TimeSliderControl implements IControl, DockController {
   setDates(dates?: Array<Date | string | number> | null): void {
     const s = this._state;
     const prev = s.currentDate.getTime();
-    const list = dates ? normalizeDates(dates) : [];
-    this._allDates = list.length > 0 ? list : undefined;
+    this._allDates = dates ? ingestDates(dates, s.granularity) : undefined;
+    // An explicitly supplied list supersedes whatever URL was loaded before.
+    this._datesUrl = undefined;
     Object.assign(
       s,
       this._allDates
         ? resolveRange(this._allDates)
         : // Dropping the list leaves a continuous timeline spanning whatever the
           // list last covered, so the dock does not jump to an unrelated range.
-          resolveRange(undefined, s.startDate, s.endDate)
+          // An end that was already open stays open rather than being pinned here.
+          resolveRange(undefined, s.startDate, s.endDateAuto ? null : s.endDate)
     );
     this._rebuildScale();
     s.currentDate = this._scale.snap(s.currentDate);
@@ -814,6 +846,38 @@ export class TimeSliderControl implements IControl, DockController {
     this._notifyDateChanged(s.currentDate, prev);
     this._emit('rangechange');
     this._emit('statechange');
+  }
+
+  /**
+   * Loads the timeline's dates from a URL and applies them, so the list can live
+   * next to the data instead of in the calling code.
+   *
+   * Accepts JSON, CSV, or plain text (see {@link fetchDateList} for the shapes
+   * recognized, which include a GeoJSON / STAC `FeatureCollection`). The URL is
+   * remembered for {@link getDatesUrl} and serialized alongside the resolved
+   * dates, so restoring a config never has to refetch.
+   *
+   * @param url - URL of the document listing the dates
+   * @param init - Optional fetch options (headers, abort signal, credentials)
+   * @returns The dates that were applied
+   * @throws If the request fails or no dates can be parsed from the response.
+   *   The existing timeline is left untouched when that happens.
+   *
+   * @example
+   * ```typescript
+   * await timeSlider.loadDates('https://example.com/scenes.json');
+   * ```
+   */
+  async loadDates(url: string, init?: RequestInit): Promise<Date[]> {
+    // Resolve before touching state, so a failed fetch cannot blank the timeline.
+    const dates = await fetchDateList(url, init);
+    this.setDates(dates);
+    // setDates clears the URL (an explicit list supersedes one); record it after.
+    this._datesUrl = url;
+    this._view?.syncRange();
+    // Return what was actually applied, not what was fetched: a catalog often
+    // reports several timestamps per step (one per tile), and those collapse.
+    return this.getDates() ?? [];
   }
 
   // ----- Sources ----------------------------------------------------------
@@ -933,6 +997,7 @@ export class TimeSliderControl implements IControl, DockController {
       ...(s.endDateAuto ? {} : { endDate: s.endDate.toISOString() }),
       // Saved unclipped: startDate/endDate above re-apply as clips on restore.
       ...(this._allDates ? { dates: this._allDates.map((d) => d.toISOString()) } : {}),
+      ...(this._datesUrl ? { datesUrl: this._datesUrl } : {}),
       interval: s.interval,
       granularity: s.granularity,
       granularities: [...this._options.granularities],
@@ -962,8 +1027,10 @@ export class TimeSliderControl implements IControl, DockController {
     this._adapters = [];
 
     const s = this._state;
-    const dates = config.dates ? normalizeDates(config.dates) : undefined;
-    this._allDates = dates?.length ? dates : undefined;
+    this._allDates = config.dates ? ingestDates(config.dates, config.granularity) : undefined;
+    // The resolved dates were serialized too, so restoring is offline-safe: the
+    // URL is kept for display only and is never refetched here.
+    this._datesUrl = this._allDates ? config.datesUrl : undefined;
     // A missing end date means the saved range was open: re-resolve it to the
     // current date so reopening an old project still reaches the latest data.
     Object.assign(

@@ -1,5 +1,6 @@
 import type { Granularity } from '../core/types';
 import { formatDate } from '../template/dateFormat';
+import { floorToGranularity } from './granularity';
 import { niceMultiple, type Tick } from './ticks';
 
 /**
@@ -16,7 +17,7 @@ const ORDINAL_LABEL: Record<Granularity, { short: string; long: string }> = {
 
 /**
  * Coerces an arbitrary list of date-likes into the ordered, de-duplicated Date
- * list an ordinal timeline steps through. Unparseable entries are dropped
+ * list an ordinal timeline steps through. Unparsable entries are dropped
  * rather than poisoning the timeline with an Invalid Date.
  *
  * @param input - Dates as Date objects, parseable strings, or epoch milliseconds
@@ -29,6 +30,32 @@ export function normalizeDates(input: Iterable<Date | string | number>): Date[] 
     if (!Number.isNaN(time)) times.add(time);
   }
   return [...times].sort((a, b) => a - b).map((time) => new Date(time));
+}
+
+/**
+ * Collapses dates that fall in the same granularity unit down to one step,
+ * keeping the earliest timestamp of each group.
+ *
+ * A timeline at day granularity has at most one step per day, so a catalog that
+ * reports several timestamps for a single acquisition (a STAC search returning
+ * one feature per tile, each a few seconds apart) would otherwise draw a run of
+ * identical-looking ticks. The surviving entry keeps its exact time rather than
+ * being floored, so a URL template embedding the full timestamp still resolves.
+ *
+ * @param dates - Ascending, de-duplicated dates
+ * @param granularity - The unit at most one step may occupy
+ * @returns One date per occupied unit, ascending
+ */
+export function collapseByUnit(dates: Date[], granularity: Granularity): Date[] {
+  const kept: Date[] = [];
+  let lastUnit: number | undefined;
+  for (const date of dates) {
+    const unit = floorToGranularity(date, granularity).getTime();
+    if (unit === lastUnit) continue;
+    lastUnit = unit;
+    kept.push(date);
+  }
+  return kept;
 }
 
 /**

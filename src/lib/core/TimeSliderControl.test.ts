@@ -449,6 +449,106 @@ describe('TimeSliderControl explicit dates', () => {
     expect(day(control.getCurrentDate())).toBe('2023-01-29');
   });
 
+  it('collapses catalog timestamps that share a granularity unit into one step', () => {
+    // A STAC search reports one feature per tile, so a single overpass arrives
+    // as several timestamps seconds apart. At day granularity that is one step,
+    // not a run of identical-looking ticks.
+    const { control } = mountDates({
+      dates: [
+        '2023-02-18T16:12:31Z',
+        '2023-02-18T16:12:35Z',
+        '2023-02-18T16:12:39Z',
+        '2023-02-20T16:22:11Z',
+      ],
+    });
+    expect(control.getDates()?.map(day)).toEqual(['2023-02-18', '2023-02-20']);
+    // The surviving entry keeps its exact time, so a URL template embedding the
+    // full timestamp still resolves.
+    expect(control.getDates()?.[0].toISOString()).toBe('2023-02-18T16:12:31.000Z');
+  });
+
+  it('keeps sub-day steps at hour granularity', () => {
+    const { control } = mountDates({
+      granularity: 'hour',
+      dates: ['2023-02-18T16:12:31Z', '2023-02-18T18:40:00Z'],
+    });
+    expect(control.getDates()).toHaveLength(2);
+  });
+
+  it('loadDates fetches a list from a URL and applies it', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        headers: { get: () => 'application/json' },
+        text: async () => JSON.stringify(DATES),
+      }))
+    );
+    const control = new TimeSliderControl({ startDate: '2020-01-01', endDate: '2026-01-01' });
+    const stub = createStubMap();
+    control.onAdd(stub.map);
+
+    await control.loadDates('https://example.com/scenes.json');
+    expect(control.getDates()?.map(day)).toEqual(DATES);
+    expect(control.getDatesUrl()).toBe('https://example.com/scenes.json');
+    expect(control.getState().dates?.map(day)).toEqual(DATES);
+    // Serialized alongside the resolved dates, so restoring never refetches.
+    const config = control.getConfig();
+    expect(config.datesUrl).toBe('https://example.com/scenes.json');
+    expect(config.dates).toHaveLength(DATES.length);
+    vi.unstubAllGlobals();
+  });
+
+  it('loadDates leaves the timeline untouched when the fetch fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: false,
+        status: 404,
+        headers: { get: () => null },
+        text: async () => '',
+      }))
+    );
+    const { control } = mountDates();
+    await expect(control.loadDates('https://example.com/missing.json')).rejects.toThrow(/404/);
+    // The working list survives a failed load.
+    expect(control.getDates()?.map(day)).toEqual(DATES);
+    expect(control.getDatesUrl()).toBeUndefined();
+    vi.unstubAllGlobals();
+  });
+
+  it('setDates supersedes a URL the list was loaded from', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        headers: { get: () => 'text/plain' },
+        text: async () => DATES.join('\n'),
+      }))
+    );
+    const { control } = mountDates();
+    await control.loadDates('https://example.com/scenes.txt');
+    expect(control.getDatesUrl()).toBe('https://example.com/scenes.txt');
+    control.setDates(['2024-01-01']);
+    expect(control.getDatesUrl()).toBeUndefined();
+    expect(control.getConfig().datesUrl).toBeUndefined();
+    vi.unstubAllGlobals();
+  });
+
+  it('keeps an already-open end open when clearing a list that was never set', () => {
+    const control = new TimeSliderControl({ startDate: '2023-01-01' });
+    const stub = createStubMap();
+    control.onAdd(stub.map);
+    expect(control.getState().endDateAuto).toBe(true);
+    // A no-op clear (e.g. an add-form example that declares no dates) must not
+    // pin the open end to today.
+    control.setDates(null);
+    expect(control.getState().endDateAuto).toBe(true);
+    expect(control.getConfig().endDate).toBeUndefined();
+  });
+
   it('round-trips the list through getConfig / setConfig with clips intact', () => {
     const { control } = mountDates({ startDate: '2023-03-01' });
     control.goTo(new Date('2024-04-01T00:00:00Z'));

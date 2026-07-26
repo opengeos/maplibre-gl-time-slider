@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { clipDates, nearestDateIndex, normalizeDates } from './dateList';
+import { clipDates, collapseByUnit, nearestDateIndex, normalizeDates } from './dateList';
 import { createTimeScale } from './scale';
 
 const d = (iso: string) => new Date(iso);
@@ -31,13 +31,58 @@ describe('normalizeDates', () => {
     expect(dates.map(iso)).toEqual(['2024-01-01', '2024-02-01', '2024-03-01']);
   });
 
-  it('drops unparseable entries instead of yielding Invalid Dates', () => {
+  it('drops unparsable entries instead of yielding Invalid Dates', () => {
     const dates = normalizeDates(['2024-01-01', 'not a date', '2024-01-02']);
     expect(dates.map(iso)).toEqual(['2024-01-01', '2024-01-02']);
   });
 
   it('returns an empty list for empty input', () => {
     expect(normalizeDates([])).toEqual([]);
+  });
+});
+
+describe('collapseByUnit', () => {
+  // A STAC search returns one feature per tile, so a single overpass arrives as
+  // several timestamps seconds apart. At day granularity that is one step.
+  const overpass = normalizeDates([
+    '2023-02-18T16:12:31Z',
+    '2023-02-18T16:12:35Z',
+    '2023-02-18T16:12:39Z',
+    '2023-02-20T16:22:11Z',
+  ]);
+
+  it('keeps one entry per granularity unit', () => {
+    expect(collapseByUnit(overpass, 'day').map(iso)).toEqual(['2023-02-18', '2023-02-20']);
+  });
+
+  it('keeps the earliest timestamp of the group, unfloored', () => {
+    // The exact time survives, so a URL embedding it still resolves.
+    expect(collapseByUnit(overpass, 'day')[0].toISOString()).toBe('2023-02-18T16:12:31.000Z');
+  });
+
+  it('leaves sub-unit detail alone at a finer granularity', () => {
+    expect(collapseByUnit(overpass, 'hour')).toHaveLength(2);
+    expect(collapseByUnit(normalizeDates(SPARSE), 'day').map(iso)).toEqual(SPARSE);
+  });
+
+  it('collapses to one entry per month or year', () => {
+    expect(collapseByUnit(normalizeDates(SPARSE), 'month').map(iso)).toEqual([
+      '2023-01-28',
+      '2023-02-20',
+      '2023-03-27',
+      '2024-04-01',
+      '2025-02-01',
+      '2025-10-03',
+    ]);
+    expect(collapseByUnit(normalizeDates(SPARSE), 'year').map(iso)).toEqual([
+      '2023-01-28',
+      '2024-04-01',
+      '2025-02-01',
+    ]);
+  });
+
+  it('handles an empty list', () => {
+    expect(collapseByUnit([], 'day')).toEqual([]);
   });
 });
 

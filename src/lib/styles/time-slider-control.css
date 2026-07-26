@@ -30,6 +30,7 @@
   --ts-accent: #4a90d9;
   --ts-accent-hover: #3a7bc8;
   --ts-accent-ring: rgba(74, 144, 217, 0.25);
+  --ts-danger: #c0392b;
 }
 
 /* Dark palette (follows the system preference) */
@@ -54,6 +55,7 @@
     --ts-accent: #5a9fe0;
     --ts-accent-hover: #4a90d9;
     --ts-accent-ring: rgba(90, 159, 224, 0.35);
+    --ts-danger: #f08a80;
   }
 }
 
@@ -78,6 +80,7 @@
   --ts-accent: #5a9fe0;
   --ts-accent-hover: #4a90d9;
   --ts-accent-ring: rgba(90, 159, 224, 0.35);
+  --ts-danger: #f08a80;
 }
 
 /* Corner toggle button (clock icon) that collapses/expands the dock. The
@@ -164,6 +167,7 @@
 
 /* Generic dock inputs (range excluded — it has its own look) */
 .maplibregl-time-slider-dock input:not([type='range']),
+.maplibregl-time-slider-dock textarea,
 .maplibregl-time-slider-dock select {
   color: var(--ts-fg);
   background: var(--ts-input-bg);
@@ -175,6 +179,7 @@
 }
 
 .maplibregl-time-slider-dock input:not([type='range']):focus,
+.maplibregl-time-slider-dock textarea:focus,
 .maplibregl-time-slider-dock select:focus {
   border-color: var(--ts-accent);
   box-shadow: 0 0 0 2px var(--ts-accent-ring);
@@ -718,6 +723,34 @@ body.ts-resizing-v {
   gap: 2px;
   font-size: 11px;
   color: var(--ts-fg-muted);
+}
+
+/* The explicit-dates list wraps across a few lines: a long series is far easier
+ * to scan (and edit) than the same text scrolling sideways in a one-line input. */
+.ts-field textarea.ts-dates {
+  resize: vertical;
+  min-height: 34px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+
+/* Result of a pasted date-list URL: how many dates it yielded, or why it failed.
+ * Hidden until there is something to say, so the field stays compact. */
+.ts-dates-status {
+  display: none;
+  margin-top: 3px;
+  font-size: 10px;
+  line-height: 1.3;
+  color: var(--ts-fg-muted);
+  overflow-wrap: anywhere;
+}
+
+.ts-dates-status.ts-visible {
+  display: block;
+}
+
+.ts-dates-status.ts-error {
+  color: var(--ts-danger);
 }
 
 .ts-add-submit {

@@ -20,7 +20,7 @@ A MapLibre GL JS plugin for visualizing time series raster and vector data with 
   - **XYZ / WMTS** raster tiles
   - **WMS-Time** (OGC `TIME` parameter)
   - **GeoJSON** filtered by a time property
-- **"Add data" GUI** (a resizable panel) to configure the timeline (range, interval, initial date), tweak settings (granularity, which granularities show as pills, speed, loop, theme, date format, auto-play), and add layers at runtime. Picking a source type loads a ready-to-run example (URL, timeline, and settings) you can edit. Per-layer controls include opacity, a visibility toggle, and for COG a colormap dropdown with a "None" option for RGB / multi-band imagery, rescale, nodata, and band selection (a mosaic exposes the same, with NoData in the renderer's auto/off/number form)
+- **"Add data" GUI** (a resizable panel) to configure the timeline (range, an explicit **Dates** list for irregular data, interval, initial date), tweak settings (granularity, which granularities show as pills, speed, loop, theme, date format, auto-play), and add layers at runtime. Picking a source type loads a ready-to-run example (URL, timeline, and settings) you can edit. Per-layer controls include opacity, a visibility toggle, and for COG a colormap dropdown with a "None" option for RGB / multi-band imagery, rescale, nodata, and band selection (a mosaic exposes the same, with NoData in the renderer's auto/off/number form)
 - Time-to-URL templating with tokens (`{YYYY}`, `{MM}`, `{DD}`, `{HH}`, `{date:FORMAT}`) **or** a `(date) => url` function
 - `onChange` callback escape hatch for fully custom wiring
 - Serializable config (`getConfig` / `setConfig`) for sharing state
@@ -284,7 +284,11 @@ hidden because the list — not the granularity — now sets the step size.
 `interval` still works, stepping N entries at a time.
 
 The list is parsed, sorted, and de-duplicated on the way in, and accepts `Date`
-objects, parseable strings, or epoch milliseconds.
+objects, parseable strings, or epoch milliseconds. Dates falling in the same
+granularity unit collapse to a single step, keeping the earliest timestamp: a
+catalog that reports one record per tile gives several timestamps seconds apart
+for one acquisition, and at day granularity that is one step, not a run of
+identical ticks. Raise the granularity to `'hour'` if sub-day steps are real.
 
 ### Where the dates come from
 
@@ -327,6 +331,45 @@ timeSlider.setDates(features.map((f) => f.properties.datetime));
 
 `getConfig()` serializes the list (unclipped) so a saved project restores the
 same timeline, and `setDates(null)` drops back to a continuous one.
+
+### Loading the list from a URL
+
+`loadDates(url)` fetches the list instead, so it can live next to the data
+rather than in your code:
+
+```typescript
+await timeSlider.loadDates('https://example.com/scenes.json');
+```
+
+JSON, CSV, and plain text are all accepted, detected from the extension, the
+`Content-Type`, and the body:
+
+| Format | Shapes recognized |
+|--------|-------------------|
+| JSON | A bare array (`["2023-01-28", ...]`); an array of records with a `date` / `datetime` / `time` / `timestamp` / `acquired` field; a wrapper object (`{"dates": [...]}`); a GeoJSON or STAC `FeatureCollection`, reading each feature's `properties.datetime` |
+| CSV | The `date` / `datetime` / … column when there is a header row, otherwise the first column |
+| Text | One date per line, or separated by commas, semicolons, or spaces |
+
+A STAC search response or an `ogr2ogr`-style CSV export therefore works as-is,
+with no reshaping. The same parser is exported standalone as `fetchDateList(url,
+init?)` if you want the dates without applying them. A failed load throws and
+leaves the current timeline untouched.
+
+`getConfig()` records the URL next to the resolved dates, so restoring a saved
+project is offline-safe and never refetches.
+
+### From the "Add data" panel
+
+The same thing is available without writing code: the panel's **Timeline**
+section has a **Dates** field. Put either form in it —
+
+- the dates themselves, separated by commas, spaces, or newlines
+- a URL to a `.json`, `.csv`, or `.txt` file listing them, which is fetched and
+  parsed exactly as `loadDates` would, reporting underneath how many dates it
+  found (or why it could not)
+
+— and the timeline becomes ordinal. Start/End then clip that list rather than
+defining the range, and clearing the field returns to a continuous timeline.
 
 The per-date "No data" badge still applies on top of this: sources probe each
 date as you reach it, so a list that has drifted out of sync with the archive
@@ -381,7 +424,8 @@ Main control class implementing MapLibre's `IControl` interface.
 | `setDateFormat(format?)` | Set the date-label token format (applied live; omit for the granularity default) |
 | `setRange(start, end, interval?, granularity?)` | Update the range (a clip on `dates`, when set) |
 | `setDates(dates?)` | Set the explicit dates to step through; pass `null` for a continuous timeline |
-| `getDates()` | The explicit dates (unclipped), or `undefined` when continuous |
+| `loadDates(url, init?)` | Fetch the dates from a JSON / CSV / text URL and apply them |
+| `getDates()` / `getDatesUrl()` | The explicit dates (unclipped) and the URL they came from, if any |
 | `setGranularity(granularity)` | Change the active granularity |
 | `setGranularities(granularities)` | Set which granularities are offered as pills |
 | `collapse()` / `expand()` / `toggle()` | Hide / show the dock |

@@ -391,11 +391,13 @@ export interface TimeSliderOptions {
    * date that has no data. Without it, a daily timeline spanning a sparse
    * three-year archive draws a tick for all ~1,100 days.
    *
-   * The list is normalized on the way in (parsed, de-duplicated, sorted), so
+   * The list is normalized on the way in (parsed, sorted, de-duplicated, then
+   * collapsed so at most one step falls in each {@link granularity} unit), so
    * order does not matter and duplicates are harmless. Where the dates come
    * from is up to the caller — a hardcoded array, a bucket listing, a STAC
    * search, or your own API. Use {@link TimeSliderControl.setDates} to supply
-   * them after an async lookup.
+   * them after an async lookup, or {@link TimeSliderControl.loadDates} to fetch
+   * them from a JSON / CSV / text URL.
    *
    * {@link startDate} / {@link endDate} become optional clips on the list, and
    * {@link interval} steps N entries at a time. {@link granularity} no longer
@@ -590,6 +592,12 @@ export interface TimeSliderConfig {
    * for a continuous timeline.
    */
   dates?: string[];
+  /**
+   * URL the {@link dates} were loaded from, when they came from one. Kept for
+   * display; the resolved dates above are what drive the timeline, so restoring
+   * a config never refetches.
+   */
+  datesUrl?: string;
   interval: number;
   granularity: Granularity;
   currentDate: string;

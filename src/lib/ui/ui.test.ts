@@ -42,6 +42,10 @@ function baseController(overrides: Partial<DockController> = {}): DockController
     setGranularity: vi.fn(),
     setGranularities: vi.fn(),
     setRange: vi.fn(),
+    setDates: vi.fn(),
+    loadDates: vi.fn(async () => []),
+    getDates: () => undefined,
+    getDatesUrl: () => undefined,
     collapse: vi.fn(),
     getSources: () => [],
     addSource: vi.fn(() => 'id'),
@@ -244,6 +248,138 @@ describe('layersPopover', () => {
     document.body.appendChild(popover.root);
     const [, end] = timelineInputs(popover.root);
     expect(end.value).toBe('');
+    popover.destroy();
+  });
+
+  /** The Timeline section's explicit-dates input. */
+  const datesInput = (root: HTMLElement): HTMLTextAreaElement =>
+    root.querySelector('.ts-timeline-section .ts-dates') as HTMLTextAreaElement;
+
+  it('Timeline form: a typed date list is applied as explicit dates', () => {
+    const setDates = vi.fn();
+    const popover = createLayersPopover(baseController({ setDates }));
+    document.body.appendChild(popover.root);
+
+    const dates = datesInput(popover.root);
+    dates.value = '2023-01-28, 2023-02-20 2023-03-27';
+    dates.dispatchEvent(new Event('change'));
+
+    // Commas and bare spaces both separate, so a pasted list works either way.
+    expect(setDates).toHaveBeenCalledTimes(1);
+    expect(setDates.mock.calls[0][0]).toEqual(['2023-01-28', '2023-02-20', '2023-03-27']);
+    popover.destroy();
+  });
+
+  it('Timeline form: clearing the date list returns to a continuous timeline', () => {
+    const setDates = vi.fn();
+    const popover = createLayersPopover(baseController({ setDates }));
+    document.body.appendChild(popover.root);
+
+    const dates = datesInput(popover.root);
+    dates.value = '   ';
+    dates.dispatchEvent(new Event('change'));
+
+    expect(setDates).toHaveBeenCalledWith(null);
+    popover.destroy();
+  });
+
+  it('Timeline form: rejects a list where nothing parses, rather than blanking the timeline', () => {
+    const setDates = vi.fn();
+    const popover = createLayersPopover(
+      baseController({
+        setDates,
+        getDates: () => [new Date('2023-01-28T00:00:00Z'), new Date('2023-02-20T00:00:00Z')],
+      })
+    );
+    document.body.appendChild(popover.root);
+
+    const dates = datesInput(popover.root);
+    dates.value = 'yesterdayish, soon';
+    dates.dispatchEvent(new Event('change'));
+
+    expect(setDates).not.toHaveBeenCalled();
+    // The field snaps back to the list still in force.
+    expect(dates.value).toBe('2023-01-28, 2023-02-20');
+    popover.destroy();
+  });
+
+  it('Timeline form: shows the full list, not the clipped one', () => {
+    const popover = createLayersPopover(
+      baseController({
+        // State carries the clipped list; getDates() carries the original.
+        getState: () => ({ ...STATE, dates: [new Date('2023-02-20T00:00:00Z')] }),
+        getDates: () => [new Date('2023-01-28T00:00:00Z'), new Date('2023-02-20T00:00:00Z')],
+      })
+    );
+    document.body.appendChild(popover.root);
+    expect(datesInput(popover.root).value).toBe('2023-01-28, 2023-02-20');
+    popover.destroy();
+  });
+
+  it('Timeline form: a pasted URL is fetched rather than read as a date', async () => {
+    const loadDates = vi.fn(async () => [new Date('2023-01-28T00:00:00Z')]);
+    const setDates = vi.fn();
+    const popover = createLayersPopover(baseController({ loadDates, setDates }));
+    document.body.appendChild(popover.root);
+
+    const dates = datesInput(popover.root);
+    dates.value = 'https://example.com/scenes.json';
+    dates.dispatchEvent(new Event('change'));
+
+    expect(loadDates).toHaveBeenCalledWith('https://example.com/scenes.json');
+    // The URL is a source, not a list; setDates would have swallowed it as one.
+    expect(setDates).not.toHaveBeenCalled();
+    await vi.waitFor(() =>
+      expect(popover.root.querySelector('.ts-dates-status')?.textContent).toBe('1 date loaded')
+    );
+    popover.destroy();
+  });
+
+  it('Timeline form: a failed URL load reports the error and changes nothing', async () => {
+    const loadDates = vi.fn(async () => {
+      throw new Error('Could not load dates: https://example.com/x.json responded 404');
+    });
+    const setDates = vi.fn();
+    const popover = createLayersPopover(baseController({ loadDates, setDates }));
+    document.body.appendChild(popover.root);
+
+    const dates = datesInput(popover.root);
+    dates.value = 'https://example.com/x.json';
+    dates.dispatchEvent(new Event('change'));
+
+    await vi.waitFor(() => {
+      const status = popover.root.querySelector('.ts-dates-status') as HTMLElement;
+      expect(status.textContent).toMatch(/404/);
+      expect(status.classList.contains('ts-error')).toBe(true);
+    });
+    expect(setDates).not.toHaveBeenCalled();
+    popover.destroy();
+  });
+
+  it('Timeline form: keeps showing the URL a list was loaded from', () => {
+    const popover = createLayersPopover(
+      baseController({
+        getDates: () => [new Date('2023-01-28T00:00:00Z')],
+        getDatesUrl: () => 'https://example.com/scenes.json',
+      })
+    );
+    document.body.appendChild(popover.root);
+    // Shorter than the expanded list, and it says where the dates are maintained.
+    expect(datesInput(popover.root).value).toBe('https://example.com/scenes.json');
+    popover.destroy();
+  });
+
+  it('Timeline form: selecting a source type clears a leftover date list', () => {
+    const setDates = vi.fn();
+    const popover = createLayersPopover(baseController({ setDates }));
+    document.body.appendChild(popover.root);
+
+    const select = popover.root.querySelector('.ts-type-select') as HTMLSelectElement;
+    select.value = 'xyz';
+    select.dispatchEvent(new Event('change'));
+
+    // Otherwise the previous example's dates would clip the new example's range.
+    expect(setDates).toHaveBeenCalledWith(null);
     popover.destroy();
   });
 
