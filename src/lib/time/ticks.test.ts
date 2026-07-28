@@ -26,6 +26,19 @@ describe('generateTicks', () => {
     expect(majors.map((t) => t.label)).toEqual(['2023', '2024']);
   });
 
+  it('labels every month in a short monthly range', () => {
+    const ticks = generateTicks(d('2023-12-01T00:00:00Z'), d('2024-02-01T00:00:00Z'), 'month');
+    expect(ticks).toHaveLength(3);
+    expect(ticks.every((tick) => tick.major)).toBe(true);
+    expect(ticks.map((tick) => tick.label)).toEqual(['Dec 2023', 'Jan 2024', 'Feb 2024']);
+  });
+
+  it('keeps short-range labels within the tick budget', () => {
+    const ticks = generateTicks(d('2023-12-01T00:00:00Z'), d('2024-02-01T00:00:00Z'), 'month', 2);
+    expect(ticks.filter((tick) => tick.major).map((tick) => tick.label)).toEqual(['2024']);
+    expect(ticks.length).toBeLessThanOrEqual(3);
+  });
+
   it('emits one tick per year for year granularity with no minors', () => {
     const ticks = generateTicks(d('2020-01-01T00:00:00Z'), d('2023-01-01T00:00:00Z'), 'year');
     expect(ticks.every((t) => t.major)).toBe(true);

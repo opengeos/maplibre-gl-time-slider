@@ -90,7 +90,20 @@ function floorToMultiple(date: Date, unit: Granularity, multiple: number): Date 
  * @param granularity - The active granularity
  * @returns A short label string
  */
-function majorLabel(date: Date, granularity: Granularity): string {
+function majorLabel(date: Date, granularity: Granularity, labelUnit: Granularity): string {
+  if (labelUnit === granularity) {
+    switch (granularity) {
+      case 'hour':
+        return formatDate(date, 'HH:00');
+      case 'day':
+        return formatDate(date, 'MMM DD');
+      case 'month':
+        return formatDate(date, 'MMM YYYY');
+      case 'year':
+        return formatDate(date, 'YYYY');
+    }
+  }
+
   switch (granularity) {
     case 'hour':
       return formatDate(date, 'MMM DD');
@@ -122,7 +135,13 @@ export function generateTicks(
   granularity: Granularity,
   maxTicks = 400
 ): Tick[] {
-  const labelUnit = LABEL_UNIT[granularity];
+  const periodCount = Math.abs(unitsBetween(start, end, granularity)) + 1;
+  // A short range is clearer when every period is labeled. Longer ranges keep
+  // using the next-coarser unit so labels stay compact and uncluttered.
+  const labelUnit =
+    granularity !== 'year' && periodCount <= Math.min(12, maxTicks)
+      ? granularity
+      : LABEL_UNIT[granularity];
   const ticks: Tick[] = [];
   const seen = new Set<number>();
 
@@ -134,7 +153,7 @@ export function generateTicks(
       date,
       fraction: dateToFraction(date, start, end),
       major,
-      label: major ? majorLabel(date, granularity) : undefined,
+      label: major ? majorLabel(date, granularity, labelUnit) : undefined,
     });
   };
 
