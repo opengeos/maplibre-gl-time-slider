@@ -84,6 +84,24 @@ function floorToMultiple(date: Date, unit: Granularity, multiple: number): Date 
 }
 
 /**
+ * Counts unit boundaries within a range, stopping once the count exceeds a
+ * caller-provided limit.
+ */
+function boundaryCount(start: Date, end: Date, unit: Granularity, limit: number): number {
+  let boundary = floorToGranularity(start, unit);
+  if (boundary.getTime() < start.getTime()) {
+    boundary = addUnits(boundary, unit, 1);
+  }
+
+  let count = 0;
+  while (boundary.getTime() <= end.getTime() && count <= limit) {
+    count += 1;
+    boundary = addUnits(boundary, unit, 1);
+  }
+  return count;
+}
+
+/**
  * Builds the label for a major tick based on the active granularity.
  *
  * @param date - The tick date
@@ -135,11 +153,12 @@ export function generateTicks(
   granularity: Granularity,
   maxTicks = 400
 ): Tick[] {
-  const periodCount = Math.abs(unitsBetween(start, end, granularity)) + 1;
+  const shortRangeLimit = Math.min(12, maxTicks);
+  const periodCount = boundaryCount(start, end, granularity, shortRangeLimit);
   // A short range is clearer when every period is labeled. Longer ranges keep
   // using the next-coarser unit so labels stay compact and uncluttered.
   const labelUnit =
-    granularity !== 'year' && periodCount <= Math.min(12, maxTicks)
+    granularity !== 'year' && periodCount > 0 && periodCount <= shortRangeLimit
       ? granularity
       : LABEL_UNIT[granularity];
   const ticks: Tick[] = [];

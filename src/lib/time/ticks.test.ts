@@ -33,6 +33,14 @@ describe('generateTicks', () => {
     expect(ticks.map((tick) => tick.label)).toEqual(['Dec 2023', 'Jan 2024', 'Feb 2024']);
   });
 
+  it('counts aligned month boundaries for non-boundary range dates', () => {
+    const ticks = generateTicks(d('2023-01-31T00:00:00Z'), d('2024-01-31T00:00:00Z'), 'month');
+    expect(ticks).toHaveLength(12);
+    expect(ticks.every((tick) => tick.major)).toBe(true);
+    expect(ticks.at(0)?.label).toBe('Feb 2023');
+    expect(ticks.at(-1)?.label).toBe('Jan 2024');
+  });
+
   it('keeps short-range labels within the tick budget', () => {
     const ticks = generateTicks(d('2023-12-01T00:00:00Z'), d('2024-02-01T00:00:00Z'), 'month', 2);
     expect(ticks.filter((tick) => tick.major).map((tick) => tick.label)).toEqual(['2024']);
