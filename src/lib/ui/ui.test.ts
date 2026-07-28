@@ -144,6 +144,7 @@ describe('axisRenderer', () => {
     axis.renderTicks();
     expect(ticks).toHaveBeenCalledWith(10);
     axis.destroy();
+    axis.root.remove();
   });
 
   it('positions the marker at the current date fraction', () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateTicks } from './ticks';
+import { generateTicks, niceMultiple } from './ticks';
 
 const d = (iso: string) => new Date(iso);
 
@@ -57,7 +57,9 @@ describe('generateTicks', () => {
       12
     );
     const majors = ticks.filter((tick) => tick.major);
-    expect(majors.every((tick) => tick.date.getUTCMonth() === 0)).toBe(true);
+    expect(
+      majors.every((tick) => tick.date.getUTCMonth() === 0 && tick.date.getUTCDate() === 1)
+    ).toBe(true);
     expect(majors.map((tick) => tick.label)).toEqual([
       '2016',
       '2017',
@@ -69,5 +71,9 @@ describe('generateTicks', () => {
       '2023',
       '2024',
     ]);
+  });
+
+  it('does not approximate calendar years with fixed day multiples', () => {
+    expect(niceMultiple(3650, 10, 'day')).toBe(180);
   });
 });

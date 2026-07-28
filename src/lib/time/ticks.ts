@@ -50,13 +50,18 @@ export function niceMultiple(count: number, max: number, unit: Granularity = 'ye
   if (count <= max) return 1;
   const candidates: Record<Granularity, number[]> = {
     hour: [1, 2, 3, 4, 6, 12, 24, 48, 72, 168, 336, 720],
-    day: [1, 2, 3, 7, 14, 28, 30, 60, 90, 180, 365, 730, 1825],
+    // Keep day multiples subannual. Calendar-year cadences belong to the
+    // month/year major ticks; fixed 365-day steps drift across leap years.
+    day: [1, 2, 3, 7, 14, 28, 30, 60, 90, 180],
     month: [1, 2, 3, 4, 6, 12, 24, 36, 60, 120, 240, 600],
     year: [1, 2, 5, 10, 20, 25, 50, 100, 200, 500, 1000],
   };
   for (const m of candidates[unit]) {
     if (count / m <= max) return m;
   }
+  // A soft cap is preferable to inventing a fixed day interval that pretends
+  // to be a calendar year and drifts across leap years.
+  if (unit === 'day') return candidates.day[candidates.day.length - 1];
   return Math.ceil(count / max);
 }
 
