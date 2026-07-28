@@ -84,13 +84,44 @@ function floorToMultiple(date: Date, unit: Granularity, multiple: number): Date 
 }
 
 /**
+ * Counts unit boundaries within a range, stopping once the count exceeds a
+ * caller-provided limit.
+ */
+function boundaryCount(start: Date, end: Date, unit: Granularity, limit: number): number {
+  let boundary = floorToGranularity(start, unit);
+  if (boundary.getTime() < start.getTime()) {
+    boundary = addUnits(boundary, unit, 1);
+  }
+
+  let count = 0;
+  while (boundary.getTime() <= end.getTime() && count <= limit) {
+    count += 1;
+    boundary = addUnits(boundary, unit, 1);
+  }
+  return count;
+}
+
+/**
  * Builds the label for a major tick based on the active granularity.
  *
  * @param date - The tick date
  * @param granularity - The active granularity
  * @returns A short label string
  */
-function majorLabel(date: Date, granularity: Granularity): string {
+function majorLabel(date: Date, granularity: Granularity, labelUnit: Granularity): string {
+  if (labelUnit === granularity) {
+    switch (granularity) {
+      case 'hour':
+        return formatDate(date, 'HH:00');
+      case 'day':
+        return formatDate(date, 'MMM DD');
+      case 'month':
+        return formatDate(date, 'MMM YYYY');
+      case 'year':
+        return formatDate(date, 'YYYY');
+    }
+  }
+
   switch (granularity) {
     case 'hour':
       return formatDate(date, 'MMM DD');
@@ -122,7 +153,14 @@ export function generateTicks(
   granularity: Granularity,
   maxTicks = 400
 ): Tick[] {
-  const labelUnit = LABEL_UNIT[granularity];
+  const shortRangeLimit = Math.min(12, maxTicks);
+  const periodCount = boundaryCount(start, end, granularity, shortRangeLimit);
+  // A short range is clearer when every period is labeled. Longer ranges keep
+  // using the next-coarser unit so labels stay compact and uncluttered.
+  const labelUnit =
+    granularity !== 'year' && periodCount > 0 && periodCount <= shortRangeLimit
+      ? granularity
+      : LABEL_UNIT[granularity];
   const ticks: Tick[] = [];
   const seen = new Set<number>();
 
@@ -134,7 +172,7 @@ export function generateTicks(
       date,
       fraction: dateToFraction(date, start, end),
       major,
-      label: major ? majorLabel(date, granularity) : undefined,
+      label: major ? majorLabel(date, granularity, labelUnit) : undefined,
     });
   };
 
