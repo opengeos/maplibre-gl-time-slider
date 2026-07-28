@@ -156,18 +156,21 @@ export function generateTicks(
   // Minor ticks at granularity boundaries (skipped when they coincide with the
   // major unit, e.g. year granularity).
   if (granularity !== labelUnit) {
-    const minorMul = niceMultiple(
-      Math.max(1, Math.abs(unitsBetween(start, end, granularity))),
-      maxTicks,
-      granularity
-    );
-    let minor = floorToMultiple(start, granularity, minorMul);
-    if (minor.getTime() < start.getTime()) {
-      minor = addUnits(minor, granularity, minorMul);
-    }
-    while (minor.getTime() <= end.getTime()) {
-      push(minor, false);
-      minor = addUnits(minor, granularity, minorMul);
+    const minorCount = Math.max(1, Math.abs(unitsBetween(start, end, granularity)));
+    const minorMul = niceMultiple(minorCount, maxTicks, granularity);
+    // Minor ticks are optional. Suppress them when the largest honest
+    // subannual day interval still exceeds the width-derived budget rather
+    // than inventing a fixed 365-day cadence that drifts across leap years.
+    const minorFits = granularity !== 'day' || minorCount / minorMul <= maxTicks;
+    if (minorFits) {
+      let minor = floorToMultiple(start, granularity, minorMul);
+      if (minor.getTime() < start.getTime()) {
+        minor = addUnits(minor, granularity, minorMul);
+      }
+      while (minor.getTime() <= end.getTime()) {
+        push(minor, false);
+        minor = addUnits(minor, granularity, minorMul);
+      }
     }
   }
 

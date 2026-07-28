@@ -76,4 +76,15 @@ describe('generateTicks', () => {
   it('does not approximate calendar years with fixed day multiples', () => {
     expect(niceMultiple(3650, 10, 'day')).toBe(180);
   });
+
+  it('omits daily minor ticks when no subannual interval fits', () => {
+    const ticks = generateTicks(
+      d('2015-06-01T00:00:00Z'),
+      d('2024-06-01T00:00:00Z'),
+      'day',
+      2
+    );
+    expect(ticks.every((tick) => tick.major)).toBe(true);
+    expect(ticks.length).toBeLessThanOrEqual(2);
+  });
 });
