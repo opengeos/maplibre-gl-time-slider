@@ -95,12 +95,14 @@ export function createAxis(controller: DockController): AxisHandle {
   window.addEventListener('mouseup', onUp);
   window.addEventListener('touchend', onUp);
 
-  // Labeled ticks from the most recent render, in left-to-right order. Kept so
-  // the labels can be re-thinned on resize without rebuilding the tick DOM.
+  // Labeled ticks from the most recent render, in left-to-right order.
   let labelEls: { el: HTMLElement; fraction: number }[] = [];
 
   // Minimum gap, in pixels, to leave between two adjacent label boxes.
   const LABEL_GAP = 6;
+  // Approximate horizontal space reserved for each labeled tick. The scale
+  // uses this width-derived budget to select a nice calendar multiple.
+  const LABEL_WIDTH = 64;
 
   /**
    * Hides tick labels that would overlap at the track's current pixel width,
@@ -132,9 +134,11 @@ export function createAxis(controller: DockController): AxisHandle {
   const renderTicks = (): void => {
     ticksLayer.replaceChildren();
     labelEls = [];
+    const width = track.getBoundingClientRect().width;
+    const maxTicks = width > 0 ? Math.max(2, Math.floor(width / LABEL_WIDTH)) : undefined;
     // The scale decides what a tick is: calendar boundaries on a continuous
     // timeline, one per entry (evenly spaced) on an ordinal one.
-    const ticks = controller.getScale().ticks();
+    const ticks = controller.getScale().ticks(maxTicks);
     for (const tick of ticks) {
       const el = document.createElement('div');
       el.className = tick.major ? 'ts-tick ts-tick-major' : 'ts-tick';
@@ -151,16 +155,21 @@ export function createAxis(controller: DockController): AxisHandle {
     thinLabels();
   };
 
-  // Re-thin labels when the dock width changes (responsive reflow, window
-  // resize, device rotation) so they never cluster on a narrowed track.
+  // Rebuild ticks when the dock width changes so the scale can select a new
+  // nice interval, then retain the collision pass for variable-width labels.
   let resizeRaf = 0;
+  let renderedWidth = -1;
   const observer =
     typeof ResizeObserver !== 'undefined'
       ? new ResizeObserver(() => {
           if (resizeRaf) return;
           resizeRaf = requestAnimationFrame(() => {
             resizeRaf = 0;
-            thinLabels();
+            const width = track.getBoundingClientRect().width;
+            if (width !== renderedWidth) {
+              renderedWidth = width;
+              renderTicks();
+            }
           });
         })
       : null;

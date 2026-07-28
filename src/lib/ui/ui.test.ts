@@ -91,7 +91,7 @@ describe('axisRenderer', () => {
     axis.destroy();
   });
 
-  it('thins overlapping tick labels to fit the track width', () => {
+  it('limits tick labels to fit the track width', () => {
     const axis = createAxis(
       baseController({
         getState: () => ({
@@ -119,10 +119,30 @@ describe('axisRenderer', () => {
     axis.renderTicks();
     const labels = Array.from(axis.root.querySelectorAll('.ts-tick-label')) as HTMLElement[];
     const visible = labels.filter((l) => l.style.display !== 'none');
-    // ~36 monthly labels are generated, but a 200px track fits at most ~5 of 40px.
-    expect(labels.length).toBeGreaterThan(10);
-    expect(visible.length).toBeLessThan(labels.length);
-    expect(visible.length).toBeLessThanOrEqual(6);
+    // A 200px track budgets three ticks, rather than generating all ~36
+    // monthly labels and hiding most of them after layout.
+    expect(labels.length).toBeLessThanOrEqual(3);
+    expect(visible.length).toBe(labels.length);
+    axis.destroy();
+  });
+
+  it('derives the tick budget from the track width', () => {
+    const ticks = vi.fn(() => []);
+    const axis = createAxis(
+      baseController({
+        getScale: () => ({
+          ...createTimeScale(STATE),
+          ticks,
+        }),
+      })
+    );
+    document.body.appendChild(axis.root);
+    const track = axis.root.querySelector('.ts-axis-track') as HTMLElement;
+    track.getBoundingClientRect = () =>
+      ({ left: 0, width: 640, top: 0, right: 640, bottom: 10, height: 10 }) as DOMRect;
+
+    axis.renderTicks();
+    expect(ticks).toHaveBeenCalledWith(10);
     axis.destroy();
   });
 
