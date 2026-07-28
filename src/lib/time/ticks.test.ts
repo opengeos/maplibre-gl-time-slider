@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateTicks } from './ticks';
+import { generateTicks, niceMultiple } from './ticks';
 
 const d = (iso: string) => new Date(iso);
 
@@ -47,5 +47,33 @@ describe('generateTicks', () => {
   it('thins ticks for very large ranges', () => {
     const ticks = generateTicks(d('1900-01-01T00:00:00Z'), d('2100-01-01T00:00:00Z'), 'year', 50);
     expect(ticks.length).toBeLessThanOrEqual(60);
+  });
+
+  it('uses yearly month multiples for a decade-wide daily axis', () => {
+    const ticks = generateTicks(
+      d('2015-06-01T00:00:00Z'),
+      d('2024-06-01T00:00:00Z'),
+      'day',
+      12
+    );
+    const majors = ticks.filter((tick) => tick.major);
+    expect(
+      majors.every((tick) => tick.date.getUTCMonth() === 0 && tick.date.getUTCDate() === 1)
+    ).toBe(true);
+    expect(majors.map((tick) => tick.label)).toEqual([
+      '2016',
+      '2017',
+      '2018',
+      '2019',
+      '2020',
+      '2021',
+      '2022',
+      '2023',
+      '2024',
+    ]);
+  });
+
+  it('does not approximate calendar years with fixed day multiples', () => {
+    expect(niceMultiple(3650, 10, 'day')).toBe(180);
   });
 });

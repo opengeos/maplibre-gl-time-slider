@@ -46,13 +46,41 @@ const LABEL_UNIT: Record<Granularity, Granularity> = {
  * @param max - Maximum desired tick count
  * @returns A step multiple from a set of round numbers
  */
-export function niceMultiple(count: number, max: number): number {
+export function niceMultiple(count: number, max: number, unit: Granularity = 'year'): number {
   if (count <= max) return 1;
-  const candidates = [1, 2, 3, 5, 10, 20, 25, 50, 100, 200, 500, 1000];
-  for (const m of candidates) {
+  const candidates: Record<Granularity, number[]> = {
+    hour: [1, 2, 3, 4, 6, 12, 24, 48, 72, 168, 336, 720],
+    // Keep day multiples subannual. Calendar-year cadences belong to the
+    // month/year major ticks; fixed 365-day steps drift across leap years.
+    day: [1, 2, 3, 7, 14, 28, 30, 60, 90, 180],
+    month: [1, 2, 3, 4, 6, 12, 24, 36, 60, 120, 240, 600],
+    year: [1, 2, 5, 10, 20, 25, 50, 100, 200, 500, 1000],
+  };
+  for (const m of candidates[unit]) {
     if (count / m <= max) return m;
   }
+  // A soft cap is preferable to inventing a fixed day interval that pretends
+  // to be a calendar year and drifts across leap years.
+  if (unit === 'day') return candidates.day[candidates.day.length - 1];
   return Math.ceil(count / max);
+}
+
+/**
+ * Floors a date to a stable calendar boundary for a unit multiple.
+ */
+function floorToMultiple(date: Date, unit: Granularity, multiple: number): Date {
+  const floored = floorToGranularity(date, unit);
+  if (multiple <= 1) return floored;
+  if (unit === 'year') {
+    return new Date(Date.UTC(Math.floor(floored.getUTCFullYear() / multiple) * multiple, 0, 1));
+  }
+  if (unit === 'month') {
+    const month = floored.getUTCFullYear() * 12 + floored.getUTCMonth();
+    const aligned = Math.floor(month / multiple) * multiple;
+    return new Date(Date.UTC(Math.floor(aligned / 12), aligned % 12, 1));
+  }
+  const unitMs = unit === 'day' ? 86_400_000 : 3_600_000;
+  return new Date(Math.floor(floored.getTime() / (multiple * unitMs)) * multiple * unitMs);
 }
 
 /**
@@ -113,9 +141,10 @@ export function generateTicks(
   // Major ticks at coarse-unit boundaries.
   const majorMul = niceMultiple(
     Math.max(1, Math.abs(unitsBetween(start, end, labelUnit))),
-    maxTicks
+    maxTicks,
+    labelUnit
   );
-  let major = floorToGranularity(start, labelUnit);
+  let major = floorToMultiple(start, labelUnit, majorMul);
   if (major.getTime() < start.getTime()) {
     major = addUnits(major, labelUnit, majorMul);
   }
@@ -129,9 +158,10 @@ export function generateTicks(
   if (granularity !== labelUnit) {
     const minorMul = niceMultiple(
       Math.max(1, Math.abs(unitsBetween(start, end, granularity))),
-      maxTicks
+      maxTicks,
+      granularity
     );
-    let minor = floorToGranularity(start, granularity);
+    let minor = floorToMultiple(start, granularity, minorMul);
     if (minor.getTime() < start.getTime()) {
       minor = addUnits(minor, granularity, minorMul);
     }
