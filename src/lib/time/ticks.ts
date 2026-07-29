@@ -1,6 +1,6 @@
 import type { Granularity } from '../core/types';
-import { addUnits, floorToGranularity } from './granularity';
-import { unitsBetween, dateToFraction } from './timeline';
+import { GRANULARITIES, addUnits, floorToGranularity } from './granularity';
+import { dateToFraction } from './timeline';
 import { formatDate } from '../template/dateFormat';
 
 /**
@@ -29,40 +29,144 @@ export interface Tick {
 }
 
 /**
- * The coarser unit used to place labeled major ticks for each granularity.
+ * One rung of the tick ladder: a calendar unit repeated a round number of times.
  */
-const LABEL_UNIT: Record<Granularity, Granularity> = {
-  hour: 'day',
-  day: 'month',
-  month: 'year',
-  year: 'year',
+interface TickStep {
+  unit: Granularity;
+  multiple: number;
+}
+
+/**
+ * The ladder of candidate tick intervals, finest-first. Every rung is a round
+ * calendar cadence that reads naturally on an axis (3 hours, a week, a quarter,
+ * a quarter-century), so any span from a few hours to a few millennia can be
+ * covered by picking the rung nearest the desired spacing.
+ *
+ * Steps are expressed as calendar units rather than fixed millisecond
+ * intervals, so months and years land on real boundaries and never drift across
+ * leap years.
+ */
+const TICK_LADDER: TickStep[] = [
+  { unit: 'hour', multiple: 1 },
+  { unit: 'hour', multiple: 2 },
+  { unit: 'hour', multiple: 3 },
+  { unit: 'hour', multiple: 6 },
+  { unit: 'hour', multiple: 12 },
+  { unit: 'day', multiple: 1 },
+  { unit: 'day', multiple: 2 },
+  { unit: 'day', multiple: 7 },
+  { unit: 'day', multiple: 14 },
+  { unit: 'month', multiple: 1 },
+  { unit: 'month', multiple: 3 },
+  { unit: 'month', multiple: 6 },
+  { unit: 'year', multiple: 1 },
+  { unit: 'year', multiple: 2 },
+  { unit: 'year', multiple: 5 },
+  { unit: 'year', multiple: 10 },
+  { unit: 'year', multiple: 25 },
+  { unit: 'year', multiple: 50 },
+  { unit: 'year', multiple: 100 },
+  { unit: 'year', multiple: 250 },
+  { unit: 'year', multiple: 500 },
+  { unit: 'year', multiple: 1000 },
+];
+
+/**
+ * Mean length of each unit, used only to compare rungs against a desired
+ * spacing. Placement itself always walks real calendar boundaries.
+ */
+const MEAN_UNIT_MS: Record<Granularity, number> = {
+  hour: 3_600_000,
+  day: 86_400_000,
+  // Mean Gregorian month and year (365.2425 days), so long spans pick a rung
+  // that matches the true average density rather than a 365-day approximation.
+  month: 2_629_746_000,
+  year: 31_556_952_000,
 };
 
 /**
- * Picks a "nice" step multiple so that `count / multiple` stays at or below
- * `max`.
- *
- * @param count - Approximate number of candidate ticks
- * @param max - Maximum desired tick count
- * @returns A step multiple from a set of round numbers
+ * Approximate duration of a ladder rung in milliseconds.
  */
-export function niceMultiple(count: number, max: number, unit: Granularity = 'year'): number {
-  if (count <= max) return 1;
-  const candidates: Record<Granularity, number[]> = {
-    hour: [1, 2, 3, 4, 6, 12, 24, 48, 72, 168, 336, 720],
-    // Keep day multiples subannual. Calendar-year cadences belong to the
-    // month/year major ticks; fixed 365-day steps drift across leap years.
-    day: [1, 2, 3, 7, 14, 28, 30, 60, 90, 180],
-    month: [1, 2, 3, 4, 6, 12, 24, 36, 60, 120, 240, 600],
-    year: [1, 2, 5, 10, 20, 25, 50, 100, 200, 500, 1000],
-  };
-  for (const m of candidates[unit]) {
-    if (count / m <= max) return m;
+function stepMs(step: TickStep): number {
+  return MEAN_UNIT_MS[step.unit] * step.multiple;
+}
+
+/**
+ * Which rungs can divide one another exactly. Hours divide days and months
+ * divide years, but no whole number of days makes up a calendar month, so the
+ * two families never mix.
+ */
+function familyOf(unit: Granularity): 'time' | 'calendar' {
+  return unit === 'hour' || unit === 'day' ? 'time' : 'calendar';
+}
+
+/**
+ * A rung's size in its family's base unit: hours for the time family, months
+ * for the calendar one. Exact, unlike the mean-length estimates used for
+ * spacing, so divisibility between rungs can be tested with a modulo.
+ */
+function familySize(step: TickStep): number {
+  switch (step.unit) {
+    case 'hour':
+      return step.multiple;
+    case 'day':
+      return step.multiple * 24;
+    case 'month':
+      return step.multiple;
+    case 'year':
+      return step.multiple * 12;
   }
-  // A soft cap is preferable to inventing a fixed day interval that pretends
-  // to be a calendar year and drifts across leap years.
-  if (unit === 'day') return candidates.day[candidates.day.length - 1];
-  return Math.ceil(count / max);
+}
+
+/**
+ * Number of ticks a rung would place across a span, approximated from mean unit
+ * lengths. Used for budget checks only, never for placement.
+ */
+function approxCount(spanMs: number, step: TickStep): number {
+  return Math.floor(Math.max(0, spanMs) / stepMs(step)) + 1;
+}
+
+/**
+ * Picks the ladder rung that best fills a span with about `targetCount` ticks.
+ *
+ * The rung is never finer than the data's own granularity: an axis stepping in
+ * whole months has nothing to say at day boundaries.
+ *
+ * @param spanMs - Range length in milliseconds
+ * @param granularity - The active granularity, which floors the ladder
+ * @param targetCount - Desired number of ticks, from the caller's pixel budget
+ * @returns The chosen rung
+ */
+function selectStep(spanMs: number, granularity: Granularity, targetCount: number): TickStep {
+  const floor = GRANULARITIES.indexOf(granularity);
+  const candidates = TICK_LADDER.filter((step) => GRANULARITIES.indexOf(step.unit) >= floor);
+  const ideal = Math.max(0, spanMs) / Math.max(1, targetCount);
+  return candidates.find((step) => stepMs(step) >= ideal) ?? candidates[candidates.length - 1];
+}
+
+/**
+ * Picks the rung for minor ticks: the finest one that evenly subdivides the
+ * major interval, is no finer than the granularity, and still fits the budget.
+ *
+ * @returns The chosen rung, or undefined when the major interval cannot be
+ *   subdivided without overcrowding the track
+ */
+function selectMinorStep(
+  major: TickStep,
+  spanMs: number,
+  granularity: Granularity,
+  budget: number
+): TickStep | undefined {
+  const floor = GRANULARITIES.indexOf(granularity);
+  const majorSize = familySize(major);
+  for (const step of TICK_LADDER) {
+    if (GRANULARITIES.indexOf(step.unit) < floor) continue;
+    if (familyOf(step.unit) !== familyOf(major.unit)) continue;
+    const size = familySize(step);
+    if (size >= majorSize || majorSize % size !== 0) continue;
+    if (approxCount(spanMs, step) <= budget) return step;
+  }
+  return undefined;
 }
 
 /**
@@ -84,67 +188,79 @@ function floorToMultiple(date: Date, unit: Granularity, multiple: number): Date 
 }
 
 /**
- * Counts unit boundaries within a range, stopping once the count exceeds a
- * caller-provided limit.
+ * Backstop on emitted ticks. The ladder already sizes both intervals to the
+ * caller's budget, so this only guards against pathological inputs (a range of
+ * millennia at hour granularity) producing an unbounded walk.
  */
-function boundaryCount(start: Date, end: Date, unit: Granularity, limit: number): number {
-  let boundary = floorToGranularity(start, unit);
-  if (boundary.getTime() < start.getTime()) {
-    boundary = addUnits(boundary, unit, 1);
-  }
+const WALK_LIMIT = 10_000;
 
-  let count = 0;
-  while (boundary.getTime() <= end.getTime() && count <= limit) {
-    count += 1;
-    boundary = addUnits(boundary, unit, 1);
+/**
+ * Walks the calendar boundaries a rung lands on inside an inclusive range.
+ *
+ * @param start - Inclusive range start
+ * @param end - Inclusive range end
+ * @param step - The ladder rung to walk
+ * @returns Boundary dates in ascending order
+ */
+function walkBoundaries(start: Date, end: Date, step: TickStep): Date[] {
+  const dates: Date[] = [];
+  let current = floorToMultiple(start, step.unit, step.multiple);
+  if (current.getTime() < start.getTime()) {
+    current = addUnits(current, step.unit, step.multiple);
   }
-  return count;
+  while (current.getTime() <= end.getTime() && dates.length < WALK_LIMIT) {
+    dates.push(current);
+    current = addUnits(current, step.unit, step.multiple);
+  }
+  return dates;
 }
 
 /**
- * Builds the label for a major tick based on the active granularity.
+ * Labels a major tick at the coarsest unit its rung can carry, adding coarser
+ * context only where it changes.
+ *
+ * A daily axis reads `Aug 01 2023 · Aug 03 · Aug 05 …`: the year is spelled out
+ * once at the start and again whenever the axis crosses into a new one, so no
+ * label is ambiguous and none repeats what its neighbour already said.
  *
  * @param date - The tick date
- * @param granularity - The active granularity
+ * @param step - The rung the tick sits on
+ * @param previous - The preceding major tick, or undefined for the first
  * @returns A short label string
  */
-function majorLabel(date: Date, granularity: Granularity, labelUnit: Granularity): string {
-  if (labelUnit === granularity) {
-    switch (granularity) {
-      case 'hour':
-        return formatDate(date, 'HH:00');
-      case 'day':
-        return formatDate(date, 'MMM DD');
-      case 'month':
-        return formatDate(date, 'MMM YYYY');
-      case 'year':
-        return formatDate(date, 'YYYY');
-    }
-  }
-
-  switch (granularity) {
-    case 'hour':
-      return formatDate(date, 'MMM DD');
-    case 'day':
-      // Show the year at the start of a year, otherwise the month abbreviation.
-      return date.getUTCMonth() === 0 ? formatDate(date, 'YYYY') : formatDate(date, 'MMM');
-    case 'month':
+function majorLabel(date: Date, step: TickStep, previous: Date | undefined): string {
+  switch (step.unit) {
     case 'year':
       return formatDate(date, 'YYYY');
+    case 'month':
+      return formatDate(date, 'MMM YYYY');
+    case 'day': {
+      const newYear = !previous || previous.getUTCFullYear() !== date.getUTCFullYear();
+      return formatDate(date, newYear ? 'MMM DD YYYY' : 'MMM DD');
+    }
+    case 'hour': {
+      const newDay =
+        !previous ||
+        floorToGranularity(previous, 'day').getTime() !== floorToGranularity(date, 'day').getTime();
+      return formatDate(date, newDay ? 'MMM DD HH:00' : 'HH:00');
+    }
   }
 }
 
 /**
  * Generates axis ticks for a date range and granularity.
  *
- * Major (labeled) ticks fall on the boundaries of the next-coarser unit; minor
- * ticks fall on granularity boundaries. Both are thinned with "nice" multiples
- * so the total stays manageable regardless of range size.
+ * A single span-driven ladder covers every range. The rung nearest
+ * `span / maxTicks` becomes the labeled major interval, and the finest rung that
+ * evenly subdivides it supplies the unlabeled minor ticks. Three months, thirty
+ * one days, and two centuries therefore all land at a comparable label density
+ * without any special-casing.
  *
  * @param start - Inclusive range start
  * @param end - Inclusive range end
- * @param granularity - The active granularity
- * @param maxTicks - Soft cap on ticks of each kind (default 400)
+ * @param granularity - The active granularity, which the ladder never goes below
+ * @param maxTicks - Approximate label budget, from the track's pixel width
+ *   (default 400)
  * @returns Ticks sorted by date, de-duplicated by timestamp
  */
 export function generateTicks(
@@ -153,62 +269,33 @@ export function generateTicks(
   granularity: Granularity,
   maxTicks = 400
 ): Tick[] {
-  const shortRangeLimit = Math.min(12, maxTicks);
-  const periodCount = boundaryCount(start, end, granularity, shortRangeLimit);
-  // A short range is clearer when every period is labeled. Longer ranges keep
-  // using the next-coarser unit so labels stay compact and uncluttered.
-  const labelUnit =
-    granularity !== 'year' && periodCount > 0 && periodCount <= shortRangeLimit
-      ? granularity
-      : LABEL_UNIT[granularity];
+  const spanMs = end.getTime() - start.getTime();
+  const budget = Math.max(1, Math.floor(maxTicks));
+  const majorStep = selectStep(spanMs, granularity, budget);
+  // Minor ticks are hairlines rather than labels, so they can sit four to a
+  // label slot before the track starts to look like a comb.
+  const minorStep = selectMinorStep(majorStep, spanMs, granularity, budget * 4);
+
   const ticks: Tick[] = [];
   const seen = new Set<number>();
+  let previousMajor: Date | undefined;
 
-  const push = (date: Date, major: boolean): void => {
-    const time = date.getTime();
-    if (time < start.getTime() || time > end.getTime() || seen.has(time)) return;
-    seen.add(time);
+  for (const date of walkBoundaries(start, end, majorStep)) {
+    seen.add(date.getTime());
     ticks.push({
       date,
       fraction: dateToFraction(date, start, end),
-      major,
-      label: major ? majorLabel(date, granularity, labelUnit) : undefined,
+      major: true,
+      label: majorLabel(date, majorStep, previousMajor),
     });
-  };
-
-  // Major ticks at coarse-unit boundaries.
-  const majorMul = niceMultiple(
-    Math.max(1, Math.abs(unitsBetween(start, end, labelUnit))),
-    maxTicks,
-    labelUnit
-  );
-  let major = floorToMultiple(start, labelUnit, majorMul);
-  if (major.getTime() < start.getTime()) {
-    major = addUnits(major, labelUnit, majorMul);
-  }
-  while (major.getTime() <= end.getTime()) {
-    push(major, true);
-    major = addUnits(major, labelUnit, majorMul);
+    previousMajor = date;
   }
 
-  // Minor ticks at granularity boundaries (skipped when they coincide with the
-  // major unit, e.g. year granularity).
-  if (granularity !== labelUnit) {
-    const minorCount = Math.max(1, Math.abs(unitsBetween(start, end, granularity)));
-    const minorMul = niceMultiple(minorCount, maxTicks, granularity);
-    // Minor ticks are optional. Suppress them when the largest honest
-    // subannual day interval still exceeds the width-derived budget rather
-    // than inventing a fixed 365-day cadence that drifts across leap years.
-    const minorFits = granularity !== 'day' || minorCount / minorMul <= maxTicks;
-    if (minorFits) {
-      let minor = floorToMultiple(start, granularity, minorMul);
-      if (minor.getTime() < start.getTime()) {
-        minor = addUnits(minor, granularity, minorMul);
-      }
-      while (minor.getTime() <= end.getTime()) {
-        push(minor, false);
-        minor = addUnits(minor, granularity, minorMul);
-      }
+  if (minorStep) {
+    for (const date of walkBoundaries(start, end, minorStep)) {
+      if (seen.has(date.getTime())) continue;
+      seen.add(date.getTime());
+      ticks.push({ date, fraction: dateToFraction(date, start, end), major: false });
     }
   }
 

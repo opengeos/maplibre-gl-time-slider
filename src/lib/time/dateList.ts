@@ -1,7 +1,7 @@
 import type { Granularity } from '../core/types';
 import { formatDate } from '../template/dateFormat';
 import { floorToGranularity } from './granularity';
-import { niceMultiple, type Tick } from './ticks';
+import { type Tick } from './ticks';
 
 /**
  * Token formats for an ordinal tick label. The `long` form is used whenever a
@@ -101,6 +101,33 @@ export function nearestDateIndex(dates: Date[], time: number): number {
 }
 
 /**
+ * Round strides an ordinal list may be thinned by. An ordinal axis counts
+ * entries rather than elapsed time, so the "nice" values are plain round
+ * numbers instead of the calendar ladder a continuous axis walks.
+ */
+const ORDINAL_STRIDES = [1, 2, 5, 10, 20, 25, 50, 100, 200, 500, 1000];
+
+/**
+ * Smallest round stride that keeps `count / stride` at or below `max`.
+ *
+ * The budget is normalized the same way `generateTicks` normalizes its own, so
+ * a zero or negative `max` cannot produce a stride of `Infinity` or a negative
+ * one, either of which would leave the caller's stepping loop unable to finish.
+ *
+ * @param count - Number of entries in the list
+ * @param max - Maximum desired tick count
+ * @returns A stride of at least 1
+ */
+export function niceStride(count: number, max: number): number {
+  const budget = Math.max(1, Math.floor(max));
+  if (count <= budget) return 1;
+  for (const stride of ORDINAL_STRIDES) {
+    if (count / stride <= budget) return stride;
+  }
+  return Math.ceil(count / budget);
+}
+
+/**
  * Generates axis ticks for an ordinal (explicit date list) timeline.
  *
  * Every date gets a tick, evenly spaced, so a three-day gap and a three-month
@@ -120,7 +147,7 @@ export function generateOrdinalTicks(
 ): Tick[] {
   if (dates.length === 0) return [];
   const format = ORDINAL_LABEL[granularity];
-  const stride = niceMultiple(dates.length, maxTicks);
+  const stride = niceStride(dates.length, maxTicks);
   const span = Math.max(1, dates.length - 1);
   const ticks: Tick[] = [];
   let lastYear: number | undefined;
