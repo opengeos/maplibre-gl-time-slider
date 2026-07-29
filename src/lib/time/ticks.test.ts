@@ -162,6 +162,18 @@ describe('generateTicks', () => {
     expect(ticks.length).toBeLessThanOrEqual(2);
   });
 
+  it('places every tick at the origin for a zero-length range', () => {
+    const instant = d('2024-01-01T00:00:00Z');
+    const ticks = generateTicks(instant, instant, 'day', 15);
+    expect(ticks.every((tick) => tick.fraction === 0)).toBe(true);
+  });
+
+  it('emits nothing for an inverted range', () => {
+    expect(generateTicks(d('2024-02-01T00:00:00Z'), d('2024-01-01T00:00:00Z'), 'day', 15)).toEqual(
+      []
+    );
+  });
+
   it('subdivides the major interval with minor ticks', () => {
     const ticks = generateTicks(d('2023-01-01T00:00:00Z'), d('2024-12-01T00:00:00Z'), 'month', 15);
     // Quarterly majors, monthly minors: every month boundary is present.

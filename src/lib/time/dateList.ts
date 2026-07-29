@@ -110,16 +110,21 @@ const ORDINAL_STRIDES = [1, 2, 5, 10, 20, 25, 50, 100, 200, 500, 1000];
 /**
  * Smallest round stride that keeps `count / stride` at or below `max`.
  *
+ * The budget is normalized the same way `generateTicks` normalizes its own, so
+ * a zero or negative `max` cannot produce a stride of `Infinity` or a negative
+ * one, either of which would leave the caller's stepping loop unable to finish.
+ *
  * @param count - Number of entries in the list
  * @param max - Maximum desired tick count
  * @returns A stride of at least 1
  */
 export function niceStride(count: number, max: number): number {
-  if (count <= max) return 1;
+  const budget = Math.max(1, Math.floor(max));
+  if (count <= budget) return 1;
   for (const stride of ORDINAL_STRIDES) {
-    if (count / stride <= max) return stride;
+    if (count / stride <= budget) return stride;
   }
-  return Math.ceil(count / max);
+  return Math.ceil(count / budget);
 }
 
 /**
