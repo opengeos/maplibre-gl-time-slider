@@ -247,6 +247,12 @@ export class MosaicAdapter extends BaseAdapter {
     // a microtask-sized window in which an older failed load can report
     // `no data` for the newly selected date.
     const seq = ++this.requestSeq;
+    // A fresh load supersedes any prior missing result immediately. Without
+    // this reset, a retry that starts just after the previous request fails can
+    // leave its delayed badge visible until the new mosaic finishes loading.
+    // A genuinely missing result below reports false again and starts the
+    // control's debounce from that settled result.
+    this.onDataStatus?.(this.id, true);
     // The GPU (deck.gl) engine can't render under a globe view, so switch to
     // mercator before its first mosaic loads. The WASM engine renders through a
     // MapLibre raster source, which works in globe, so its projection is left

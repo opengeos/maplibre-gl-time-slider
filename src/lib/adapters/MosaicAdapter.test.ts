@@ -391,11 +391,41 @@ describe('MosaicAdapter', () => {
     const newRender = adapter.update(d3);
     rejectOld(new Error('404'));
     await oldRender;
-    expect(status).toEqual([]);
+    expect(status).toEqual([true, true]);
 
     releaseSecondUrl('https://e/new.json');
     await newRender;
-    expect(status).toEqual([true]);
+    expect(status).toEqual([true, true, true]);
+  });
+
+  it('clears a prior missing status as soon as a retry starts', async () => {
+    const { map } = createStubMap();
+    const status: boolean[] = [];
+    const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => undefined);
+    const adapter = new MosaicAdapter(
+      { type: 'mosaic', id: 'retry', url: 'https://e/{YYYY}_{MM}.json' },
+      { map, onDataStatus: (_id, available) => status.push(available) }
+    );
+    await adapter.add(d1);
+
+    const manager = lastManager();
+    vi.spyOn(manager, 'addRaster').mockRejectedValueOnce(new Error('404'));
+    await adapter.update(d2);
+    expect(status.at(-1)).toBe(false);
+
+    let finishRetry!: (id: string) => void;
+    vi.spyOn(manager, 'addRaster').mockImplementationOnce(
+      () =>
+        new Promise<string>((resolve) => {
+          finishRetry = resolve;
+        })
+    );
+    const retry = adapter.update(d3);
+    expect(status.at(-1)).toBe(true);
+    await vi.waitFor(() => expect(finishRetry).toBeTypeOf('function'));
+    finishRetry('retry-layer');
+    await retry;
+    debugSpy.mockRestore();
   });
 
   it('is constructed by the registry for a mosaic spec', () => {
