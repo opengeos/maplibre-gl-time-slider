@@ -929,9 +929,32 @@ export class TimeSliderControl implements IControl, DockController {
    */
   addSource(spec: SourceSpec): string {
     if (!this._map) {
-      // Defer to onAdd by stashing the spec in options.
-      this._options.sources = [...this._options.sources, spec];
+      // Defer to onAdd by stashing the spec in options. Explicit ids are
+      // unique layer identities, so a later definition replaces an earlier
+      // one instead of creating two adapters that race to own the same map
+      // layer and data-status entry.
+      this._options.sources = spec.id
+        ? [...this._options.sources.filter((source) => source.id !== spec.id), spec]
+        : [...this._options.sources, spec];
       return spec.id ?? '';
+    }
+    if (spec.id) {
+      // Saved configurations can contain repeated ids (for example after an
+      // older host appended a source while editing it). Keep the last
+      // definition, matching normal configuration override semantics. Besides
+      // preventing MapLibre id collisions, this stops a superseded adapter's
+      // failed request from briefly showing "No data" while the replacement
+      // adapter successfully loads the same date.
+      const existing = this._adapters.findIndex((adapter) => adapter.id === spec.id);
+      if (existing !== -1) {
+        this._adapters[existing].remove();
+        this._adapters.splice(existing, 1);
+        if (this._unavailableSources.delete(spec.id) && this._unavailableSources.size === 0) {
+          if (this._dataStatusTimer) clearTimeout(this._dataStatusTimer);
+          this._dataStatusTimer = undefined;
+          this._view?.syncDataStatus(false);
+        }
+      }
     }
     const adapter = createAdapter(spec, {
       map: this._map,
@@ -1090,8 +1113,16 @@ export class TimeSliderControl implements IControl, DockController {
     if (config.dateFormat !== undefined) this._options.dateFormat = config.dateFormat;
     if (config.beforeId !== undefined) this._options.beforeId = config.beforeId;
 
+    // Treat explicit ids as unique here too. setConfig rebuilds adapters
+    // directly rather than going through addSource, and may receive legacy
+    // saved projects created by the old add-form append behavior.
+    const sources = config.sources.filter(
+      (source, index, all) =>
+        !source.id || !all.slice(index + 1).some((candidate) => candidate.id === source.id)
+    );
+
     if (this._map) {
-      for (const spec of config.sources) {
+      for (const spec of sources) {
         const adapter = createAdapter(spec, {
           map: this._map,
           beforeId: this._options.beforeId,
@@ -1106,7 +1137,7 @@ export class TimeSliderControl implements IControl, DockController {
           .catch(() => undefined);
       }
     } else {
-      this._options.sources = [...config.sources];
+      this._options.sources = [...sources];
     }
 
     this._applyCollapsed();

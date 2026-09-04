@@ -224,6 +224,31 @@ describe('TimeSliderControl sources', () => {
     expect(control.getSources()).toHaveLength(0);
   });
 
+  it('keeps only the last source when saved configuration repeats an id', () => {
+    const { control } = mount({
+      sources: [
+        { type: 'xyz', id: 'same', tiles: 'https://old/{z}/{x}/{y}.png' },
+        { type: 'xyz', id: 'same', tiles: 'https://new/{z}/{x}/{y}.png' },
+      ],
+    });
+
+    expect(control.getSources()).toEqual([
+      { type: 'xyz', id: 'same', tiles: 'https://new/{z}/{x}/{y}.png' },
+    ]);
+  });
+
+  it('replaces an active source that reuses an explicit id', () => {
+    const { control } = mount({
+      sources: [{ type: 'xyz', id: 'same', tiles: 'https://old/{z}/{x}/{y}.png' }],
+    });
+
+    control.addSource({ type: 'xyz', id: 'same', tiles: 'https://new/{z}/{x}/{y}.png' });
+
+    expect(control.getSources()).toEqual([
+      { type: 'xyz', id: 'same', tiles: 'https://new/{z}/{x}/{y}.png' },
+    ]);
+  });
+
   it('setSourceOpacity updates the layer paint', () => {
     const { control, stub } = mount({
       sources: [{ type: 'xyz', id: 'x', tiles: 'https://t/{z}/{x}/{y}.png' }],
@@ -334,6 +359,21 @@ describe('TimeSliderControl config', () => {
     control.setConfig(config);
     expect(iso(control.getCurrentDate())).toBe('2024-04-20T00:00:00.000Z');
     expect(control.getSources()).toHaveLength(1);
+  });
+
+  it('deduplicates source ids when restoring a legacy configuration', () => {
+    const { control } = mount();
+    const config = control.getConfig();
+    config.sources = [
+      { type: 'xyz', id: 'same', tiles: 'https://old/{z}/{x}/{y}.png' },
+      { type: 'xyz', id: 'same', tiles: 'https://new/{z}/{x}/{y}.png' },
+    ];
+
+    control.setConfig(config);
+
+    expect(control.getConfig().sources).toEqual([
+      { type: 'xyz', id: 'same', tiles: 'https://new/{z}/{x}/{y}.png' },
+    ]);
   });
 
   it('serializes and restores control fields (theme, collapsed, granularities)', () => {
