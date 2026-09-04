@@ -19,6 +19,40 @@ function mount(opts: Partial<TimeSliderOptions> = {}) {
 const iso = (d: Date) => d.toISOString();
 
 describe('TimeSliderControl state', () => {
+  it('does not flash the no-data badge for a transient unavailable result', () => {
+    vi.useFakeTimers();
+    const { control, stub } = mount();
+    const badge = stub.container.querySelector('.ts-no-data')!;
+    const report = (
+      control as unknown as { _handleDataStatus(id: string, ok: boolean): void }
+    )._handleDataStatus.bind(control);
+
+    report('source', false);
+    expect(badge.classList.contains('ts-visible')).toBe(false);
+    report('source', true);
+    vi.advanceTimersByTime(250);
+    expect(badge.classList.contains('ts-visible')).toBe(false);
+    control.onRemove();
+    vi.useRealTimers();
+  });
+
+  it('shows the no-data badge when unavailability persists', () => {
+    vi.useFakeTimers();
+    const { control, stub } = mount();
+    const badge = stub.container.querySelector('.ts-no-data')!;
+    const report = (
+      control as unknown as { _handleDataStatus(id: string, ok: boolean): void }
+    )._handleDataStatus.bind(control);
+
+    report('source', false);
+    vi.advanceTimersByTime(249);
+    expect(badge.classList.contains('ts-visible')).toBe(false);
+    vi.advanceTimersByTime(1);
+    expect(badge.classList.contains('ts-visible')).toBe(true);
+    control.onRemove();
+    vi.useRealTimers();
+  });
+
   it('snaps the initial date to a step', () => {
     const { control } = mount({ initialDate: '2024-04-20T18:00:00Z' });
     expect(iso(control.getCurrentDate())).toBe('2024-04-21T00:00:00.000Z');

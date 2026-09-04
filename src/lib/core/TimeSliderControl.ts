@@ -147,6 +147,9 @@ export class TimeSliderControl implements IControl, DockController {
    * "no data" indicator). A source is added on a failed/absent load and removed
    * once it loads a date. */
   private _unavailableSources = new globalThis.Set<string>();
+  /** Defers the badge just long enough for a superseding successful render to
+   * cancel a transient unavailable result. */
+  private _dataStatusTimer?: ReturnType<typeof setTimeout>;
 
   /**
    * Creates a new TimeSliderControl.
@@ -260,6 +263,8 @@ export class TimeSliderControl implements IControl, DockController {
    */
   onRemove(): void {
     this.pause();
+    if (this._dataStatusTimer) clearTimeout(this._dataStatusTimer);
+    this._dataStatusTimer = undefined;
     for (const adapter of [...this._adapters]) {
       adapter.remove();
     }
@@ -962,6 +967,8 @@ export class TimeSliderControl implements IControl, DockController {
     // Drop any "no data" state the removed source was holding, and clear the
     // indicator if it was the last unavailable source.
     if (this._unavailableSources.delete(id) && this._unavailableSources.size === 0) {
+      if (this._dataStatusTimer) clearTimeout(this._dataStatusTimer);
+      this._dataStatusTimer = undefined;
       this._view?.syncDataStatus(false);
     }
     this._view?.refreshLayers();
@@ -1176,7 +1183,20 @@ export class TimeSliderControl implements IControl, DockController {
     if (available) this._unavailableSources.delete(id);
     else this._unavailableSources.add(id);
     const has = this._unavailableSources.size > 0;
-    if (has !== had) this._view?.syncDataStatus(has);
+    if (has === had) return;
+    if (this._dataStatusTimer) clearTimeout(this._dataStatusTimer);
+    this._dataStatusTimer = undefined;
+    if (!has) {
+      this._view?.syncDataStatus(false);
+      return;
+    }
+    // A frame can be superseded while its manifest is still settling. Avoid a
+    // red badge flash when the replacement succeeds immediately afterwards,
+    // while still surfacing a genuine unavailable date after a short delay.
+    this._dataStatusTimer = setTimeout(() => {
+      this._dataStatusTimer = undefined;
+      if (this._unavailableSources.size > 0) this._view?.syncDataStatus(true);
+    }, 250);
   }
 
   /**

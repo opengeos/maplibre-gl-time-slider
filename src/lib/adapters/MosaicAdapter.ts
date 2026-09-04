@@ -63,7 +63,7 @@ interface MosaicLayerManager {
 type MaplibreGlRasterModule = {
   LayerManager: new (
     map: AdapterContext['map'],
-    options?: { interleaved?: boolean; engine?: string },
+    options?: { interleaved?: boolean; engine?: string }
   ) => MosaicLayerManager;
 };
 
@@ -94,9 +94,9 @@ async function loadRasterModule(): Promise<MaplibreGlRasterModule> {
         throw new Error(
           'A "mosaic" time-slider source needs the optional peer dependency ' +
             '"maplibre-gl-raster" (>=0.12.0). Install it to render mosaic manifests. ' +
-            `Original error: ${err instanceof Error ? err.message : String(err)}`,
+            `Original error: ${err instanceof Error ? err.message : String(err)}`
         );
-      },
+      }
     );
   }
   return rasterModulePromise;
@@ -205,7 +205,7 @@ export class MosaicAdapter extends BaseAdapter {
       if (channels > 0) {
         state.rescale = Array.from(
           { length: channels },
-          () => [rescale[0], rescale[1]] as [number, number],
+          () => [rescale[0], rescale[1]] as [number, number]
         );
       }
     }
@@ -242,6 +242,11 @@ export class MosaicAdapter extends BaseAdapter {
    */
   private async render(date: Date): Promise<void> {
     this.lastDate = date;
+    // Invalidate the previous render before URL resolution. Even a synchronous
+    // template is awaited through this path, so incrementing afterwards leaves
+    // a microtask-sized window in which an older failed load can report
+    // `no data` for the newly selected date.
+    const seq = ++this.requestSeq;
     // The GPU (deck.gl) engine can't render under a globe view, so switch to
     // mercator before its first mosaic loads. The WASM engine renders through a
     // MapLibre raster source, which works in globe, so its projection is left
@@ -251,8 +256,7 @@ export class MosaicAdapter extends BaseAdapter {
       this.ensureMercator();
     }
     const url = await resolveUrl(this.spec.url, date);
-    if (this.removed || url === this.currentUrl) return;
-    const seq = ++this.requestSeq;
+    if (this.removed || seq !== this.requestSeq || url === this.currentUrl) return;
 
     // A date whose manifest we already found inaccessible has no data: clear the
     // stale mosaic, signal it, and skip the load rather than re-fetching (which

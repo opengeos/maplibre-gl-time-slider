@@ -57,6 +57,7 @@ vi.mock('maplibre-gl-raster', () => ({ LayerManager: FakeLayerManager }));
 
 const d1 = new Date('2024-05-15T00:00:00Z');
 const d2 = new Date('2024-06-15T00:00:00Z');
+const d3 = new Date('2024-07-15T00:00:00Z');
 
 /** The LayerManager instance the adapter created (the most recent). */
 function lastManager(): FakeLayerManager {
@@ -342,9 +343,7 @@ describe('MosaicAdapter', () => {
 
     // Second date's manifest is inaccessible: addRaster throws.
     const mgr = lastManager();
-    const addSpy = vi
-      .spyOn(mgr, 'addRaster')
-      .mockRejectedValueOnce(new Error('404'));
+    const addSpy = vi.spyOn(mgr, 'addRaster').mockRejectedValueOnce(new Error('404'));
     await adapter.update(d2);
     expect(status.at(-1)).toEqual({ id: 'chla', available: false });
     // A missing manifest is not surfaced as a console error (no scrub flood).
@@ -359,6 +358,44 @@ describe('MosaicAdapter', () => {
     expect(status).toContainEqual({ id: 'chla', available: false });
 
     errorSpy.mockRestore();
+  });
+
+  it('does not report a stale failure after a newer date starts resolving', async () => {
+    const { map } = createStubMap();
+    const status: boolean[] = [];
+    let releaseSecondUrl!: (url: string) => void;
+    const secondUrl = new Promise<string>((resolve) => {
+      releaseSecondUrl = resolve;
+    });
+    const adapter = new MosaicAdapter(
+      {
+        type: 'mosaic',
+        id: 'race',
+        url: (date) => (date === d3 ? secondUrl : `https://e/${date.toISOString()}.json`),
+      },
+      { map, onDataStatus: (_id, available) => status.push(available) }
+    );
+    await adapter.add(d1);
+    status.length = 0;
+
+    const manager = lastManager();
+    let rejectOld!: (error: Error) => void;
+    vi.spyOn(manager, 'addRaster').mockImplementationOnce(
+      () =>
+        new Promise<string>((_resolve, reject) => {
+          rejectOld = reject;
+        })
+    );
+    const oldRender = adapter.update(d2);
+    await vi.waitFor(() => expect(rejectOld).toBeTypeOf('function'));
+    const newRender = adapter.update(d3);
+    rejectOld(new Error('404'));
+    await oldRender;
+    expect(status).toEqual([]);
+
+    releaseSecondUrl('https://e/new.json');
+    await newRender;
+    expect(status).toEqual([true]);
   });
 
   it('is constructed by the registry for a mosaic spec', () => {
