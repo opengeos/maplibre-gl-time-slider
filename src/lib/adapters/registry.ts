@@ -62,6 +62,8 @@ class CustomAdapter extends BaseAdapter {
   readonly spec: CustomSourceSpec;
   private ctx: AdapterContext;
   private inner?: SourceAdapter;
+  /** Invalidates async resolutions after a newer update or removal. */
+  private requestSeq = 0;
 
   constructor(spec: CustomSourceSpec & { id: string }, ctx: AdapterContext) {
     super(spec.id, ctx, spec.opacity ?? 1);
@@ -71,7 +73,9 @@ class CustomAdapter extends BaseAdapter {
 
   async add(date: Date): Promise<void> {
     this.lastDate = date;
+    const seq = ++this.requestSeq;
     const resolved = await this.spec.resolve(date);
+    if (seq !== this.requestSeq) return;
     this.inner = createResolvedAdapter(
       {
         ...resolved,
@@ -90,7 +94,9 @@ class CustomAdapter extends BaseAdapter {
       await this.add(date);
       return;
     }
+    const seq = ++this.requestSeq;
     const resolved = await this.spec.resolve(date);
+    if (seq !== this.requestSeq) return;
     // If the resolved type changed (e.g. xyz -> geojson), the old adapter class
     // can no longer render it: tear it down and build the matching adapter.
     if (this.inner.spec.type !== resolved.type) {
@@ -117,7 +123,9 @@ class CustomAdapter extends BaseAdapter {
   }
 
   remove(): void {
+    this.requestSeq++;
     this.inner?.remove();
+    this.inner = undefined;
   }
 }
 

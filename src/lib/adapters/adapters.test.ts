@@ -303,6 +303,27 @@ describe('createAdapter', () => {
     expect(srcArg.tiles[0]).toBe('https://t/{z}/{x}/{y}.png?y=2024');
   });
 
+  it('does not create an inner adapter after removal while resolution is pending', async () => {
+    let settle: (spec: { type: 'xyz'; tiles: string }) => void = () => {};
+    const { map } = createStubMap();
+    const adapter = createAdapter(
+      {
+        type: 'custom',
+        id: 'custom-race',
+        resolve: () => new Promise((resolve) => (settle = resolve)),
+      },
+      { map }
+    );
+
+    const pending = adapter.add(d1);
+    adapter.remove();
+    settle({ type: 'xyz', tiles: 'https://t/{z}/{x}/{y}.png' });
+    await pending;
+
+    expect(map.addSource).not.toHaveBeenCalled();
+    expect(map.addLayer).not.toHaveBeenCalled();
+  });
+
   it('rebuilds the inner adapter when a custom source changes type', async () => {
     const { map } = createStubMap();
     const adapter = createAdapter(
