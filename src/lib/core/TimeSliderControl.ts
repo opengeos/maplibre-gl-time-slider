@@ -1113,8 +1113,16 @@ export class TimeSliderControl implements IControl, DockController {
     if (config.dateFormat !== undefined) this._options.dateFormat = config.dateFormat;
     if (config.beforeId !== undefined) this._options.beforeId = config.beforeId;
 
+    // Treat explicit ids as unique here too. setConfig rebuilds adapters
+    // directly rather than going through addSource, and may receive legacy
+    // saved projects created by the old add-form append behavior.
+    const sources = config.sources.filter(
+      (source, index, all) =>
+        !source.id || !all.slice(index + 1).some((candidate) => candidate.id === source.id)
+    );
+
     if (this._map) {
-      for (const spec of config.sources) {
+      for (const spec of sources) {
         const adapter = createAdapter(spec, {
           map: this._map,
           beforeId: this._options.beforeId,
@@ -1129,7 +1137,7 @@ export class TimeSliderControl implements IControl, DockController {
           .catch(() => undefined);
       }
     } else {
-      this._options.sources = [...config.sources];
+      this._options.sources = [...sources];
     }
 
     this._applyCollapsed();

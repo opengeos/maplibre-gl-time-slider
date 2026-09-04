@@ -361,6 +361,21 @@ describe('TimeSliderControl config', () => {
     expect(control.getSources()).toHaveLength(1);
   });
 
+  it('deduplicates source ids when restoring a legacy configuration', () => {
+    const { control } = mount();
+    const config = control.getConfig();
+    config.sources = [
+      { type: 'xyz', id: 'same', tiles: 'https://old/{z}/{x}/{y}.png' },
+      { type: 'xyz', id: 'same', tiles: 'https://new/{z}/{x}/{y}.png' },
+    ];
+
+    control.setConfig(config);
+
+    expect(control.getConfig().sources).toEqual([
+      { type: 'xyz', id: 'same', tiles: 'https://new/{z}/{x}/{y}.png' },
+    ]);
+  });
+
   it('serializes and restores control fields (theme, collapsed, granularities)', () => {
     const { control } = mount({ theme: 'dark', granularities: ['day', 'month'] });
     control.collapse();
