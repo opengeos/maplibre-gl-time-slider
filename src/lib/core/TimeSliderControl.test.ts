@@ -224,6 +224,31 @@ describe('TimeSliderControl sources', () => {
     expect(control.getSources()).toHaveLength(0);
   });
 
+  it('keeps only the last source when saved configuration repeats an id', () => {
+    const { control } = mount({
+      sources: [
+        { type: 'xyz', id: 'same', tiles: 'https://old/{z}/{x}/{y}.png' },
+        { type: 'xyz', id: 'same', tiles: 'https://new/{z}/{x}/{y}.png' },
+      ],
+    });
+
+    expect(control.getSources()).toEqual([
+      { type: 'xyz', id: 'same', tiles: 'https://new/{z}/{x}/{y}.png' },
+    ]);
+  });
+
+  it('replaces an active source that reuses an explicit id', () => {
+    const { control } = mount({
+      sources: [{ type: 'xyz', id: 'same', tiles: 'https://old/{z}/{x}/{y}.png' }],
+    });
+
+    control.addSource({ type: 'xyz', id: 'same', tiles: 'https://new/{z}/{x}/{y}.png' });
+
+    expect(control.getSources()).toEqual([
+      { type: 'xyz', id: 'same', tiles: 'https://new/{z}/{x}/{y}.png' },
+    ]);
+  });
+
   it('setSourceOpacity updates the layer paint', () => {
     const { control, stub } = mount({
       sources: [{ type: 'xyz', id: 'x', tiles: 'https://t/{z}/{x}/{y}.png' }],

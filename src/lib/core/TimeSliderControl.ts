@@ -929,9 +929,32 @@ export class TimeSliderControl implements IControl, DockController {
    */
   addSource(spec: SourceSpec): string {
     if (!this._map) {
-      // Defer to onAdd by stashing the spec in options.
-      this._options.sources = [...this._options.sources, spec];
+      // Defer to onAdd by stashing the spec in options. Explicit ids are
+      // unique layer identities, so a later definition replaces an earlier
+      // one instead of creating two adapters that race to own the same map
+      // layer and data-status entry.
+      this._options.sources = spec.id
+        ? [...this._options.sources.filter((source) => source.id !== spec.id), spec]
+        : [...this._options.sources, spec];
       return spec.id ?? '';
+    }
+    if (spec.id) {
+      // Saved configurations can contain repeated ids (for example after an
+      // older host appended a source while editing it). Keep the last
+      // definition, matching normal configuration override semantics. Besides
+      // preventing MapLibre id collisions, this stops a superseded adapter's
+      // failed request from briefly showing "No data" while the replacement
+      // adapter successfully loads the same date.
+      const existing = this._adapters.findIndex((adapter) => adapter.id === spec.id);
+      if (existing !== -1) {
+        this._adapters[existing].remove();
+        this._adapters.splice(existing, 1);
+        if (this._unavailableSources.delete(spec.id) && this._unavailableSources.size === 0) {
+          if (this._dataStatusTimer) clearTimeout(this._dataStatusTimer);
+          this._dataStatusTimer = undefined;
+          this._view?.syncDataStatus(false);
+        }
+      }
     }
     const adapter = createAdapter(spec, {
       map: this._map,
