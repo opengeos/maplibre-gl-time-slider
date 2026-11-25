@@ -1160,7 +1160,7 @@ export class TimeSliderControl implements IControl, DockController {
    * change. Pass `null` (or an empty list) to remove it.
    *
    * Values are parsed like dates elsewhere in the control (a `Date`, an ISO
-   * string, or epoch milliseconds); unparseable values are skipped. The
+   * string, or epoch milliseconds); unparsable values are skipped. The
    * histogram is display-only and is not part of {@link getConfig}.
    *
    * @param times - Timestamps to bin, or null to remove the histogram
