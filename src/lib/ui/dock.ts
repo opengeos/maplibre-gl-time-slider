@@ -80,6 +80,9 @@ export function createDockView(controller: DockController, options: DockOptions 
     refreshLayers() {
       layers.refresh();
     },
+    syncHistogram() {
+      axis.renderHistogram();
+    },
     syncDataStatus(unavailable: boolean) {
       axis.setDataStatus(unavailable);
     },

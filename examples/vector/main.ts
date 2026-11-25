@@ -96,6 +96,16 @@ map.on('load', () => {
 
   map.addControl(timeSlider, 'bottom-left');
 
+  // Draw how many earthquakes fall in each month behind the timeline.
+  fetch(EARTHQUAKE_DATA_URL)
+    .then((response) => response.json())
+    .then((data: GeoJSON.FeatureCollection) => {
+      timeSlider.setHistogram(data.features.map((feature) => feature.properties?.time));
+    })
+    .catch(() => {
+      // The histogram is a hint; the map works without it.
+    });
+
   // Popup on click.
   map.on('click', 'earthquakes', (e) => {
     if (!e.features || e.features.length === 0) return;

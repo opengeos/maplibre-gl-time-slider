@@ -69,6 +69,11 @@ export interface DockController {
   getDatesUrl(): string | undefined;
   /** Collapse (hide) the dock. */
   collapse(): void;
+  /**
+   * Timestamps (epoch ms) the axis histogram bins, or undefined when no
+   * histogram is shown. See {@link TimeSliderControl.setHistogram}.
+   */
+  getHistogramTimes(): ArrayLike<number> | undefined;
 
   /** Current managed sources (spec snapshots). */
   getSources(): SourceSpec[];
@@ -103,6 +108,8 @@ export interface DockView {
   syncRange(): void;
   /** Rebuild the layers list in the popover. */
   refreshLayers(): void;
+  /** Re-bin and redraw the axis histogram after its times change. */
+  syncHistogram(): void;
   /** Toggle the "no data for this date" indicator on the timeline marker. */
   syncDataStatus(unavailable: boolean): void;
   /** Detach listeners and remove the dock from the DOM. */

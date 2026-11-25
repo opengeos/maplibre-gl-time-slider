@@ -1,5 +1,6 @@
 import { clamp } from '../utils/helpers';
 import { formatDate } from '../template/dateFormat';
+import { histogramBars } from '../time/histogram';
 import type { DockController } from './types';
 
 /**
@@ -7,8 +8,10 @@ import type { DockController } from './types';
  */
 export interface AxisHandle {
   root: HTMLElement;
-  /** Regenerate tick marks from the current range/granularity. */
+  /** Regenerate tick marks (and the histogram) from the current range/granularity. */
   renderTicks(): void;
+  /** Re-bin and redraw the histogram behind the ticks. */
+  renderHistogram(): void;
   /** Reposition the marker to the current date. */
   setMarker(): void;
   /** Show or hide the "no data for this date" badge on the marker. */
@@ -43,6 +46,12 @@ export function createAxis(controller: DockController): AxisHandle {
   const track = document.createElement('div');
   track.className = 'ts-axis-track';
 
+  // Bars counting the data at each step, drawn behind the ticks. Decorative:
+  // the counts are a visual cue, not content a screen reader should announce.
+  const histogramLayer = document.createElement('div');
+  histogramLayer.className = 'ts-histogram';
+  histogramLayer.setAttribute('aria-hidden', 'true');
+
   const ticksLayer = document.createElement('div');
   ticksLayer.className = 'ts-ticks';
 
@@ -59,6 +68,7 @@ export function createAxis(controller: DockController): AxisHandle {
   knob.className = 'ts-marker-knob';
   marker.append(knob, markerLabel, noDataBadge);
 
+  track.appendChild(histogramLayer);
   track.appendChild(ticksLayer);
   track.appendChild(marker);
   root.appendChild(track);
@@ -131,7 +141,35 @@ export function createAxis(controller: DockController): AxisHandle {
     });
   };
 
+  // Narrowest bar, in pixels, before a continuous timeline's steps are merged
+  // into equal slices of the axis.
+  const MIN_BAR_WIDTH = 3;
+  // Bars drawn when the track has not been laid out yet.
+  const DEFAULT_BARS = 100;
+
+  const renderHistogram = (): void => {
+    const times = controller.getHistogramTimes();
+    histogramLayer.replaceChildren();
+    histogramLayer.classList.toggle('ts-visible', Boolean(times && times.length > 0));
+    if (!times || times.length === 0) return;
+    const width = track.getBoundingClientRect().width;
+    const maxBars = width > 0 ? Math.floor(width / MIN_BAR_WIDTH) : DEFAULT_BARS;
+    const bars = histogramBars(times, controller.getState(), maxBars);
+    const peak = bars.reduce((max, bar) => Math.max(max, bar.count), 0);
+    if (peak === 0) return;
+    for (const bar of bars) {
+      if (bar.count === 0) continue;
+      const el = document.createElement('div');
+      el.className = 'ts-histogram-bar';
+      el.style.left = `${bar.start * 100}%`;
+      el.style.width = `${(bar.end - bar.start) * 100}%`;
+      el.style.height = `${(bar.count / peak) * 100}%`;
+      histogramLayer.appendChild(el);
+    }
+  };
+
   const renderTicks = (): void => {
+    renderHistogram();
     ticksLayer.replaceChildren();
     labelEls = [];
     const width = track.getBoundingClientRect().width;
@@ -202,5 +240,5 @@ export function createAxis(controller: DockController): AxisHandle {
     window.removeEventListener('touchend', onUp);
   };
 
-  return { root, renderTicks, setMarker, setDataStatus, destroy };
+  return { root, renderTicks, renderHistogram, setMarker, setDataStatus, destroy };
 }

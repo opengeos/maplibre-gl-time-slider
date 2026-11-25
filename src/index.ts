@@ -35,6 +35,8 @@ export {
   generateOrdinalTicks,
 } from './lib/time/dateList';
 export { createTimeScale } from './lib/time/scale';
+export { histogramBars } from './lib/time/histogram';
+export type { HistogramBar } from './lib/time/histogram';
 export type { TimeScale, TimeScaleParams } from './lib/time/scale';
 export {
   fetchDateList,
