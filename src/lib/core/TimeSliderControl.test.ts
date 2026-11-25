@@ -778,6 +778,52 @@ describe('TimeSliderControl DOM', () => {
   });
 });
 
+describe('TimeSliderControl histogram', () => {
+  it('parses dates, strings and epoch ms, and skips what cannot be parsed', () => {
+    const control = new TimeSliderControl(BASE);
+    control.setHistogram([
+      new Date('2024-04-18T00:00:00Z'),
+      '2024-04-19T00:00:00Z',
+      Date.parse('2024-04-20T00:00:00Z'),
+      'not a date',
+      Number.NaN,
+    ]);
+    expect(Array.from(control.getHistogramTimes()!)).toEqual([
+      Date.parse('2024-04-18T00:00:00Z'),
+      Date.parse('2024-04-19T00:00:00Z'),
+      Date.parse('2024-04-20T00:00:00Z'),
+    ]);
+  });
+
+  it('removes the histogram for null or an empty list', () => {
+    const control = new TimeSliderControl(BASE);
+    control.setHistogram(['2024-04-18']);
+    control.setHistogram(null);
+    expect(control.getHistogramTimes()).toBeUndefined();
+    control.setHistogram(['2024-04-18']);
+    control.setHistogram([]);
+    expect(control.getHistogramTimes()).toBeUndefined();
+  });
+
+  it('draws into the dock, and re-bins when the range changes', () => {
+    const { control, stub } = mount();
+    const bars = () => stub.container.querySelectorAll('.ts-histogram-bar').length;
+    expect(bars()).toBe(0);
+    control.setHistogram(['2024-04-18T06:00:00Z', '2024-04-25T06:00:00Z']);
+    expect(bars()).toBe(1);
+    control.setRange('2024-04-18T00:00:00Z', '2024-04-26T00:00:00Z');
+    expect(bars()).toBe(2);
+    control.setHistogram(null);
+    expect(bars()).toBe(0);
+  });
+
+  it('is display-only and stays out of the saved config', () => {
+    const control = new TimeSliderControl(BASE);
+    control.setHistogram(['2024-04-18']);
+    expect(JSON.stringify(control.getConfig())).not.toContain('histogram');
+  });
+});
+
 describe('TimeSliderControl collapse', () => {
   it('starts expanded with the toggle button hidden', () => {
     const { control } = mount();

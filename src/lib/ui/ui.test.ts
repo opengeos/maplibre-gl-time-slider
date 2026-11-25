@@ -47,6 +47,7 @@ function baseController(overrides: Partial<DockController> = {}): DockController
     getDates: () => undefined,
     getDatesUrl: () => undefined,
     collapse: vi.fn(),
+    getHistogramTimes: () => undefined,
     getSources: () => [],
     addSource: vi.fn(() => 'id'),
     removeSource: vi.fn(),
@@ -156,6 +157,79 @@ describe('axisRenderer', () => {
     axis.setMarker();
     const marker = axis.root.querySelector('.ts-marker') as HTMLElement;
     expect(marker.style.left).toBe('50%');
+  });
+});
+
+describe('axis histogram', () => {
+  const t = (iso: string) => new Date(iso).getTime();
+
+  it('draws a bar per step with data, scaled to the busiest step', () => {
+    const times = [t('2024-04-18T01:00:00Z'), t('2024-04-18T02:00:00Z'), t('2024-04-20T12:00:00Z')];
+    const axis = createAxis(baseController({ getHistogramTimes: () => times }));
+    axis.renderHistogram();
+    const layer = axis.root.querySelector('.ts-histogram') as HTMLElement;
+    expect(layer.classList.contains('ts-visible')).toBe(true);
+    expect(layer.getAttribute('aria-hidden')).toBe('true');
+    // Empty steps get no bar.
+    const bars = Array.from(layer.querySelectorAll('.ts-histogram-bar')) as HTMLElement[];
+    expect(bars.map((b) => [b.style.left, b.style.width, b.style.height])).toEqual([
+      ['0%', '12.5%', '100%'],
+      ['37.5%', '25%', '50%'],
+    ]);
+  });
+
+  it('sits behind the ticks and the marker', () => {
+    const axis = createAxis(baseController());
+    const track = axis.root.querySelector('.ts-axis-track') as HTMLElement;
+    expect(Array.from(track.children).map((c) => c.className)).toEqual([
+      'ts-histogram',
+      'ts-ticks',
+      'ts-marker',
+    ]);
+  });
+
+  it('is hidden with no times, or none on the timeline', () => {
+    let times: number[] | undefined;
+    const axis = createAxis(baseController({ getHistogramTimes: () => times }));
+    const layer = axis.root.querySelector('.ts-histogram') as HTMLElement;
+    axis.renderHistogram();
+    expect(layer.classList.contains('ts-visible')).toBe(false);
+    times = [t('2030-01-01T00:00:00Z')];
+    axis.renderHistogram();
+    expect(layer.querySelectorAll('.ts-histogram-bar')).toHaveLength(0);
+  });
+
+  it('re-bins with the ticks when the range changes', () => {
+    let state = { ...STATE };
+    const times = [t('2024-04-18T01:00:00Z'), t('2024-04-25T01:00:00Z')];
+    const axis = createAxis(
+      baseController({ getState: () => ({ ...state }), getHistogramTimes: () => times })
+    );
+    axis.renderTicks();
+    expect(axis.root.querySelectorAll('.ts-histogram-bar')).toHaveLength(1);
+    state = { ...STATE, endDate: new Date('2024-04-26T00:00:00Z') };
+    axis.renderTicks();
+    expect(axis.root.querySelectorAll('.ts-histogram-bar')).toHaveLength(2);
+  });
+
+  it('merges steps into slices at least a few pixels wide', () => {
+    const times = Array.from({ length: 365 }, (_, i) => t('2020-01-01T12:00:00Z') + i * 86_400_000);
+    const axis = createAxis(
+      baseController({
+        getState: () => ({
+          ...STATE,
+          startDate: new Date('2020-01-01T00:00:00Z'),
+          endDate: new Date('2020-12-31T00:00:00Z'),
+        }),
+        getHistogramTimes: () => times,
+      })
+    );
+    const track = axis.root.querySelector('.ts-axis-track') as HTMLElement;
+    track.getBoundingClientRect = () =>
+      ({ left: 0, width: 300, top: 0, right: 300, bottom: 10, height: 10 }) as DOMRect;
+    axis.renderHistogram();
+    // 300px / 3px per bar = 100 slices rather than 366 one-day bars.
+    expect(axis.root.querySelectorAll('.ts-histogram-bar')).toHaveLength(100);
   });
 });
 

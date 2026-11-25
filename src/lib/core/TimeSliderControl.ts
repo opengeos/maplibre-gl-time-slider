@@ -150,6 +150,8 @@ export class TimeSliderControl implements IControl, DockController {
   /** Defers the badge just long enough for a superseding successful render to
    * cancel a transient unavailable result. */
   private _dataStatusTimer?: ReturnType<typeof setTimeout>;
+  /** Timestamps (epoch ms) binned into the axis histogram, when one is set. */
+  private _histogramTimes?: Float64Array;
 
   /**
    * Creates a new TimeSliderControl.
@@ -1146,6 +1148,42 @@ export class TimeSliderControl implements IControl, DockController {
     this._options.onChange?.(new Date(s.currentDate));
     this._emit('change');
     this._emit('statechange');
+  }
+
+  // ----- Histogram --------------------------------------------------------
+
+  /**
+   * Shows a histogram behind the axis: how many of `times` fall at each step,
+   * so you can see where in time the data is before scrubbing to it. Pass the
+   * timestamps of your features (or scenes, or events); the control bins them
+   * across the current range and re-bins on every range, granularity, or width
+   * change. Pass `null` (or an empty list) to remove it.
+   *
+   * Values are parsed like dates elsewhere in the control (a `Date`, an ISO
+   * string, or epoch milliseconds); unparseable values are skipped. The
+   * histogram is display-only and is not part of {@link getConfig}.
+   *
+   * @param times - Timestamps to bin, or null to remove the histogram
+   *
+   * @example
+   * ```typescript
+   * slider.setHistogram(geojson.features.map((f) => f.properties.time));
+   * ```
+   */
+  setHistogram(times?: Array<Date | string | number> | null): void {
+    const parsed = (times ?? [])
+      .map((value) => (typeof value === 'number' ? value : toDate(value).getTime()))
+      .filter((value) => Number.isFinite(value));
+    this._histogramTimes = parsed.length > 0 ? Float64Array.from(parsed) : undefined;
+    this._view?.syncHistogram();
+  }
+
+  /**
+   * Returns the timestamps (epoch ms) the axis histogram bins, or `undefined`
+   * when no histogram is shown.
+   */
+  getHistogramTimes(): ArrayLike<number> | undefined {
+    return this._histogramTimes;
   }
 
   // ----- Events -----------------------------------------------------------
